@@ -21,8 +21,8 @@ start_server() {
   rm -f "$TMP/port.json"
   "$PY" "$ROOT/tests/mock_server.py" --port-file "$TMP/port.json" >"$TMP/server.log" 2>&1 &
   SERVER_PID=$!
-  # 冷启动的 CI 机器上 python 起得慢：等端口文件，同时尽早发现进程已退出
-  for _ in $(seq 1 200); do
+  # 冷启动的 CI 机器上 python 起得慢（最长等 60s）：等端口文件，同时尽早发现进程已退出
+  for _ in $(seq 1 600); do
     if [ -s "$TMP/port.json" ]; then
       PORT=$(sed -E 's/.*"port": *([0-9]+).*/\1/' "$TMP/port.json")
       [ -n "$PORT" ] && return 0
