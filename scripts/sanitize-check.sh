@@ -31,7 +31,9 @@ scan "私有网关域名" "gw.example.com|gw.example.com/api"
 scan "云厂商内部 id" "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|/[0-9]{9,}/Video"
 scan "真实任务 id" "video_[A-Za-z0-9+/=]{40,}"
 scan "密钥形态" "sk-[A-Za-z0-9]{16,}|gho_[A-Za-z0-9]{20,}|Bearer [A-Za-z0-9]{24,}"
-scan "本机用户名（仓库 owner 名允许出现在 clone URL）" "/Users/you|luql@"
+# 不把用户名写死在脚本里：运行时取 HOME 的 basename
+local_user="$(basename "${HOME:-/nonexistent}")"
+scan "本机用户名（仓库 owner 名允许出现在 clone URL）" "/Users/${local_user}|/home/${local_user}"
 scan "计费数字" "[0-9]{2} ?[0-9]{3} tokens|completion_tokens\":[0-9]{4,}"
 
 if [ "$fail" -ne 0 ]; then
