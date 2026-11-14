@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0 - 2026-11-14
+
+Non-official endpoints, plus a real configuration lifecycle.
+
+- **`custom` protocol**: describe an in-house REST service with a JSON template — request
+  method/path/body templates with placeholders (`{model}` `{prompt}` `{size}` `{seconds}`
+  `{ref_data_uri}` …), dotted response paths, configurable auth (`bearer` / `header` / `query`),
+  and either `url` or `path` download. Templated under `~/.config/media-gen/custom/<profile>.json`.
+- **`command` protocol**: point a profile at hook commands that exchange JSON on stdin/stdout
+  (`image` / `create` / `status` / `fetch`), so exotic protocols (signed forms, token exchange) need
+  no repo change. The key is passed via environment, never argv.
+- **Configuration lifecycle**: `modify` (interactive), `set-url`, `set-key`, `set-protocol`,
+  `rename` (moves the credential entry too), `show`, `export` / `import` (never include secrets),
+  `rm --all`, and `add` doubles as update while keeping the stored key.
+- Registry remains the single place for capabilities; `~/.config/media-gen/registry.json` covers
+  in-house model ids without touching the repo.
+- Tests: +2 protocols (custom, command) with 22 protocol tests total; lifecycle assertions for
+  URL/key/protocol changes, rename, export/import, `rm --all`.
+- Docs: `references/custom-endpoints.md` (templates, placeholders, auth modes, hook contract,
+  verification recipe); every other doc updated to mention the two escape hatches.
+
 ## 0.2.0 - 2026-11-14
 
 Renamed from `seedance` (0.1.0) and generalised from one gateway + one model family to

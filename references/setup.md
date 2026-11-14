@@ -24,6 +24,29 @@ Base URL: `MEDIA_BASE_URL` (or legacy `SEEDANCE_BASE_URL`) overrides the profile
 Model: `--model` → `MEDIA_IMAGE_MODEL` / `MEDIA_VIDEO_MODEL` → profile `default_models.<kind>`.
 There is **no default endpoint and no default model**: both are deployment decisions.
 
+## Lifecycle
+
+| Need | Command |
+| --- | --- |
+| add or replace an endpoint | `setup.sh add <name> --protocol <p> --base-url <URL>` |
+| change only the URL | `setup.sh set-url <name> --base-url <URL>` |
+| rotate only the key | `printf '%s' "$KEY" \| setup.sh set-key <name>` |
+| change protocol (with template/hook) | `setup.sh set-protocol <name> --protocol <p> [--custom-file F \| --command-json J]` |
+| rename a profile | `setup.sh rename <old> <new>` (moves its credential entry) |
+| interactive edit | `setup.sh modify <name>` |
+| inspect one | `setup.sh show <name>` (masked) |
+| copy configuration to another machine | `setup.sh export > cfg.json` · `setup.sh import cfg.json` (no secrets) |
+| delete one / all | `setup.sh rm <name> [--keep-key]` · `setup.sh rm --all` |
+
+`add` on an existing name updates it; omitting the key keeps the stored one.
+
+## Non-official endpoints
+
+`protocol=custom` needs `--custom-file` (copied to `~/.config/media-gen/custom/<name>.json`), and
+`protocol=command` needs `--command-json`/`--command-file` with the hook table. Their base URL may be
+an identifier (`unused://inhouse`) for `command`. See `custom-endpoints.md` for the template format,
+placeholders, auth modes and the hook contract.
+
 ## Commands
 
 ```bash

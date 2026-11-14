@@ -30,6 +30,8 @@ That split is what makes it generic: the same `wan2.5-t2v` model is reached thro
 | `ark` | `https://ark.cn-beijing.volces.com/api/v3` | `/images/generations` | `/contents/generations/tasks` | Seedance video, Seedream image |
 | `dashscope` | `https://dashscope.aliyuncs.com/api/v1` | async task API | async task API | Wan t2i/t2v/i2v, `1024*1024` sizes |
 | `minimax` | `https://api.minimaxi.com/v1` | `/image_generation` | `/video_generation` + 2-hop fetch | Hailuo, enum durations |
+| `custom` | anything REST | template | template | describe an in-house JSON shape in a file |
+| `command` | anything at all | hook script | hook script | script exchanges JSON on stdin/stdout |
 
 Verification status per protocol is stated honestly in
 [`references/providers.md`](references/providers.md): live vs. validated against a local mock of the
@@ -48,11 +50,25 @@ Reopen the agent (or `/reload`), then `/skill:media-gen …` or just ask for an 
 ## Configure
 
 ```bash
-scripts/setup.sh add <name> --protocol <openai|ark|dashscope|minimax> --base-url <URL> \
-    [--key-stdin | --key-file PATH] [--default-image M] [--default-video M] [--set-default]
-scripts/setup.sh list | use <name> | rm <name> [--keep-key]
-scripts/setup.sh status [--profile P]     # masked key, source, protocol
-scripts/setup.sh doctor [--profile P]     # read-only GET /models + media model coverage
+# add / update an endpoint
+scripts/setup.sh add <name> --protocol <openai|ark|dashscope|minimax|custom|command> \
+    --base-url <URL> [--key-stdin | --key-file PATH] \
+    [--default-image M] [--default-video M] [--set-default]
+# non-official endpoints
+scripts/setup.sh add inhouse --protocol custom  --custom-file ./inhouse.json  --base-url https://…/api
+scripts/setup.sh add weird   --protocol command --command-json '{"create":"~/bin/x create","status":"…","fetch":"…"}'
+
+# lifecycle
+scripts/setup.sh modify <name>            # interactive: URL / key / protocol / default models
+scripts/setup.sh set-url <name> --base-url <URL>
+printf '%s' "$KEY" | scripts/setup.sh set-key <name>
+scripts/setup.sh set-protocol <name> --protocol <p> [--custom-file F | --command-json J]
+scripts/setup.sh rename <old> <new>
+scripts/setup.sh rm <name> [--keep-key]   # or: rm --all
+scripts/setup.sh export | import <file>   # configuration only, never secrets
+
+# verify
+scripts/setup.sh list | show <name> | status [--profile P] | doctor [--profile P]
 scripts/setup.sh migrate                  # import an existing seedance config/credential
 ```
 
@@ -80,6 +96,7 @@ references/setup.md            profiles, precedence, rotation, CI, security
 references/routing-image.md    image routes per protocol
 references/routing-video.md    video routes per protocol (poll + fetch)
 references/providers.md        per-provider quirks + verification status
+references/custom-endpoints.md  custom templates + command hooks for in-house APIs
 references/troubleshooting.md  full error table
 scripts/media.py               CLI: models / image / video / run / status / wait / download / doctor
 scripts/media_config.py        profiles + credentials (status/add/use/rm/migrate)

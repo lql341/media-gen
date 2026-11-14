@@ -50,6 +50,18 @@ scripts/setup.sh doctor [--profile P] # GET /models + which registry models are 
 | URL works in a browser, not later | signed URL expired | `media.py download <task_id> out.mp4` |
 | `MiniMax 任务没有 file_id` | status polled before it existed | `wait` again |
 
+## Non-official endpoints
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `custom 模板不存在` | profile points at a missing file | re-add with `--custom-file`, or write `~/.config/media-gen/custom/<name>.json` |
+| `custom image.response.mode=… 不受支持` | template typo | only `b64` / `url` (and `url` / `path` for fetch) |
+| `custom video: 在 task.id 找不到任务 id` | wrong `task_id_path` | fix the dotted path (`task.id`, `data.0.id`) |
+| `command 协议需要在配置档里提供 command` | profile lacks the hook table | `set-protocol --protocol command --command-json …` |
+| `command.create 失败（exit=N）` | hook failed | run the hook manually with JSON on stdin; stderr is echoed |
+| `command.fetch 没有输出` | hook printed nothing | return raw bytes, or return a URL and set `fetch`/`status.url` |
+| `--base-url 必须是 http(s)://` | used with `custom` but value is an identifier | `command` allows `unused://…`; `custom` needs a real URL |
+
 ## Not bugs
 
 - `models` shows `unknown` for chat models: the registry only classifies media families.

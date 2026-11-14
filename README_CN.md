@@ -29,6 +29,8 @@ scripts/media.py video -p "雨夜霓虹街道，缓慢推镜" --model doubao-see
 | `ark` | `https://ark.cn-beijing.volces.com/api/v3` | `/images/generations` | `/contents/generations/tasks` |
 | `dashscope` | `https://dashscope.aliyuncs.com/api/v1` | 异步任务 | 异步任务 |
 | `minimax` | `https://api.minimaxi.com/v1` | `/image_generation` | `/video_generation`（取文件两跳） |
+| `custom` | 任何 REST | 模板 | 模板 | 用一个 JSON 文件描述自家接口的字段形状 |
+| `command` | 任意 | 钩子脚本 | 钩子脚本 | 脚本用 stdin/stdout 交换 JSON |
 
 每个协议的**验证程度**写在 [`references/providers.md`](references/providers.md)：哪些是真机跑过、
 哪些只对着本地 mock 验证过协议形状——不吹。
@@ -46,11 +48,25 @@ bash ~/src/media-gen/scripts/install.sh --codex  # 或 --claude / --copy / --uni
 ## 配置
 
 ```bash
-scripts/setup.sh add <name> --protocol <openai|ark|dashscope|minimax> --base-url <URL> \
-    [--key-stdin | --key-file PATH] [--default-image M] [--default-video M] [--set-default]
-scripts/setup.sh list | use <name> | rm <name> [--keep-key]
-scripts/setup.sh status [--profile P]     # 密钥脱敏 + 来源 + 协议
-scripts/setup.sh doctor [--profile P]     # 只读：GET /models + 媒体模型覆盖
+# 新增 / 更新端点
+scripts/setup.sh add <name> --protocol <openai|ark|dashscope|minimax|custom|command> \
+    --base-url <URL> [--key-stdin | --key-file PATH] \
+    [--default-image M] [--default-video M] [--set-default]
+# 非官方接口
+scripts/setup.sh add inhouse --protocol custom  --custom-file ./inhouse.json --base-url https://…/api
+scripts/setup.sh add weird   --protocol command --command-json '{"create":"~/bin/x create","status":"…","fetch":"…"}'
+
+# 生命周期
+scripts/setup.sh modify <name>            # 交互改：地址 / 密钥 / 协议 / 默认模型
+scripts/setup.sh set-url <name> --base-url <URL>
+printf '%s' "$KEY" | scripts/setup.sh set-key <name>
+scripts/setup.sh set-protocol <name> --protocol <p> [--custom-file F | --command-json J]
+scripts/setup.sh rename <old> <new>
+scripts/setup.sh rm <name> [--keep-key]   # 或 rm --all
+scripts/setup.sh export | import <file>   # 只搬配置，不含密钥
+
+# 查看与自检
+scripts/setup.sh list | show <name> | status [--profile P] | doctor [--profile P]
 scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 ```
 
@@ -71,8 +87,11 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 ## 目录与测试
 
 ```bash
-bash tests/run-all.sh     # 四套离线测试：registry 单测、协议 mock、配置优先级、CLI 端到端
+bash tests/run-all.sh     # 四套离线测试：registry 单测、六种协议 mock、配置优先级与生命周期、CLI 端到端
 ```
+
+非官方端点（`custom` 模板 / `command` 钩子）的写法与验证方法见
+[`references/custom-endpoints.md`](references/custom-endpoints.md)。
 
 协议适配器是对着 `tests/mock_server.py`（按各家文档实现的本地 mock）跑的，**不联网、不要账号、不花钱**。
 仓库不配 CI（私有仓库 + Actions 分钟数不免费）。

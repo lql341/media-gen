@@ -2,10 +2,17 @@
 # media-gen 配置面板（多配置档：每个端点一个 profile）
 #
 #   scripts/setup.sh                       交互面板
-#   scripts/setup.sh add <name> --protocol <openai|ark|dashscope|minimax> --base-url <URL>
+#   scripts/setup.sh add <name> --protocol <openai|ark|dashscope|minimax|custom|command> --base-url <URL>
+#   scripts/setup.sh modify <name>          交互修改（地址 / 密钥 / 协议 / 默认模型）
+#   scripts/setup.sh show <name>            查看单个配置档（密钥脱敏）
+#   scripts/setup.sh set-url <name> --base-url <URL>
+#   scripts/setup.sh set-key <name>         只换密钥（隐藏输入）
+#   scripts/setup.sh set-protocol <name> --protocol <p> [--custom-file F | --command-json J]
+#   scripts/setup.sh rename <old> <new>
 #   scripts/setup.sh use <name>            设为默认
 #   scripts/setup.sh list                  列出配置档
-#   scripts/setup.sh rm <name> [--keep-key]
+#   scripts/setup.sh rm <name> [--keep-key] | rm --all
+#   scripts/setup.sh export | import <file>  配置迁移（不含密钥）
 #   scripts/setup.sh status [--profile P]  当前生效的地址/密钥来源（脱敏）
 #   scripts/setup.sh doctor [--profile P]  只读：GET /models + 媒体模型覆盖情况
 #   scripts/setup.sh migrate               把旧 seedance 配置迁成 profile
@@ -22,7 +29,7 @@ PY="${PYTHON:-python3}"
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 cfg() { "$PY" "$CONFIG" "$@"; }
 
-usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
 
 ask() {
   local prompt="$1" default="${2:-}" answer
@@ -43,17 +50,63 @@ need_tty() { [ -t 0 ] || die "交互配置需要终端；非交互请给 --key-s
 
 panel() {
   printf '\n== media-gen 配置 ==\n'
-  printf '1) 新增/更新端点（add）\n2) 设为默认（use）\n3) 列出（list）\n4) 状态（status）\n5) 自检（doctor）\n6) 迁移旧 seedance 配置\n7) 删除（rm）\n'
-  local choice; choice=$(ask "选择" "4")
+  printf '1) 新增端点（add）\n2) 修改已有（modify）\n3) 设为默认（use）\n4) 列出（list）\n5) 查看单个（show）\n6) 状态（status）\n7) 自检（doctor）\n8) 迁移旧 seedance 配置\n9) 删除（rm）\n'
+  local choice; choice=$(ask "选择" "6")
   case "$choice" in
     1) do_add ;;
-    2) cfg list; cfg use "$(ask '配置档名')" ;;
-    3) cfg list ;;
-    4) cfg status ;;
-    5) "$PY" "$MEDIA" doctor ;;
-    6) cfg migrate ;;
-    7) cfg list; cfg rm "$(ask '配置档名')" ;;
+    2) do_modify ;;
+    3) cfg list; cfg use "$(ask '配置档名')" ;;
+    4) cfg list ;;
+    5) cfg list; cfg show "$(ask '配置档名')" ;;
+    6) cfg status ;;
+    7) "$PY" "$MEDIA" doctor ;;
+    8) cfg migrate ;;
+    9) cfg list; cfg rm "$(ask '配置档名')" ;;
     *) die "无效选择：$choice" ;;
+  esac
+}
+
+do_modify() {
+  cfg list
+  local name; name=$(ask "要修改的配置档")
+  [ -n "$name" ] || die "需要配置档名"
+  cfg show "$name" >/dev/null || die "配置档 $name 不存在"
+  printf '1) 地址  2) 密钥  3) 协议  4) 默认模型  5) 改名  6) 删除\n'
+  local what; what=$(ask "修改哪一项" "1")
+  case "$what" in
+    1) cfg set-url "$name" --base-url "$(ask '新地址')" ;;
+    2)
+      need_tty
+      local key; key=$(ask_secret)
+      [ -n "$key" ] || die "未输入密钥，已取消"
+      printf '%s' "$key" | cfg set-key "$name"
+      ;;
+    3)
+      local proto; proto=$(ask "新协议（openai/ark/dashscope/minimax/custom/command）" "openai")
+      if [ "$proto" = custom ]; then
+        cfg set-protocol "$name" --protocol custom --custom-file "$(ask '模板文件路径')"
+      elif [ "$proto" = command ]; then
+        cfg set-protocol "$name" --protocol command --command-file "$(ask '命令表 JSON 文件路径')"
+      else
+        cfg set-protocol "$name" --protocol "$proto"
+      fi
+      ;;
+    4)
+      local kind model
+      kind=$(ask "改图片还是视频默认模型（image/video）" "video")
+      model=$(ask "模型 id")
+      [ -n "$model" ] || die "模型 id 不能为空"
+      if [ "$kind" = image ]; then
+        cfg add "$name" --protocol "$(cfg get-protocol --profile "$name")" \
+          --base-url "$(cfg get-base-url --profile "$name")" --default-image "$model"
+      else
+        cfg add "$name" --protocol "$(cfg get-protocol --profile "$name")" \
+          --base-url "$(cfg get-base-url --profile "$name")" --default-video "$model"
+      fi
+      ;;
+    5) cfg rename "$name" "$(ask '新名字')" ;;
+    6) cfg rm "$name" ;;
+    *) die "无效选择：$what" ;;
   esac
 }
 
@@ -85,7 +138,9 @@ main() {
   command -v "$PY" >/dev/null 2>&1 || die "需要 python3"
   local action="${1:-}"; [ $# -gt 0 ] && shift || true
   case "$action" in
-    add|use|rm|list|migrate) cfg "$action" "$@" ;;
+    add|use|rm|list|show|set-key|set-url|set-protocol|rename|export|import|migrate)
+      cfg "$action" "$@" ;;
+    modify) do_modify "$@" ;;
     status)  cfg status "$@" ;;
     doctor)  "$PY" "$MEDIA" doctor "$@" ;;
     "")      panel ;;

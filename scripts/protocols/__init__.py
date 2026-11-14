@@ -77,8 +77,9 @@ class Protocol:
     name = ""
     supports = ("image", "video")
 
-    def __init__(self, endpoint: Endpoint):
+    def __init__(self, endpoint: Endpoint, spec: dict | None = None):
         self.endpoint = endpoint
+        self.spec = spec or {}
 
     # ---------------------------------------------------------------- http
 
@@ -196,13 +197,16 @@ def guess_suffix(url: str | None, content_type: str = "", default: str = ".png")
 
 
 def load_protocol(name: str):
-    from . import ark, dashscope, minimax, openai
+    from . import ark, command, custom, dashscope, minimax, openai
 
     table = {
         "openai": openai.OpenAIProtocol,
         "ark": ark.ArkProtocol,
         "dashscope": dashscope.DashScopeProtocol,
         "minimax": minimax.MinimaxProtocol,
+        # 非官方端点：声明式模板 / 命令钩子
+        "custom": custom.CustomProtocol,
+        "command": command.CommandProtocol,
     }
     try:
         return table[name]

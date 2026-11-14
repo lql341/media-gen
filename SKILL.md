@@ -17,8 +17,11 @@ independent decisions decide what happens:
 
 Protocols implemented: `openai` (OpenAI-compatible: LiteLLM proxies, most gateways),
 `ark` (Volcengine native: Seedance video, Seedream image), `dashscope` (Alibaba Wan),
-`minimax` (Hailuo video, image-01). The same model can be reached through a gateway or its
-native API — the profile decides.
+`minimax` (Hailuo video, image-01), plus two escape hatches for **non-official endpoints**:
+`custom` (a JSON template file describing an in-house REST shape) and `command` (a hook script that
+exchanges JSON on stdin/stdout). The same model can be reached through a gateway, its native API, or
+a company-internal service — the profile decides, and supporting a new endpoint never requires
+editing this repository.
 
 Never conclude that a model "does not exist" because one endpoint lacks it: ask the endpoint
 (`models`) and remember that the gateway operator controls what is mounted and allowed.
@@ -48,7 +51,11 @@ Never conclude that a model "does not exist" because one endpoint lacks it: ask 
 
 | Goal | Command |
 |---|---|
-| Configure / inspect / verify | `setup.sh add|use|list|status|doctor|rm|migrate` |
+| Configure | `setup.sh add <name> --protocol <p> --base-url <URL>` (adds or updates) |
+| Inspect / verify | `setup.sh list|show|status|doctor` |
+| Change one thing | `setup.sh modify <name>` · `set-url` · `set-key` · `set-protocol` · `rename` |
+| Remove | `setup.sh rm <name> [--keep-key]` · `rm --all` |
+| Move configuration | `setup.sh export` / `import <file>` (no secrets) · `migrate` (from seedance) |
 | What can this endpoint do? | `media.py models [--kind image|video] [--json]` |
 | Text to image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` |
 | Text/image to video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [-o out.mp4]` |
@@ -71,6 +78,8 @@ validated locally before any request.
 | `429 No deployments available` | video model routed at a chat endpoint | stop; use this skill's CLI |
 | duration/size rejected locally (exit 2) | registry constraint | use the printed range/enum |
 | task `failed` | provider error in the payload | report verbatim; never silently retry a paid request |
+| `custom 模板不存在` / `模板不是合法 JSON` | profile points at a missing/broken template | re-add with `--custom-file`, or fix the file under `~/.config/media-gen/custom/` |
+| `command.status 失败（exit=…）` | the hook script failed | read its stderr (shown in the message); test the hook by hand with JSON on stdin |
 
 Full detail: `references/troubleshooting.md`; per-provider quirks: `references/providers.md`.
 
@@ -78,6 +87,8 @@ Full detail: `references/troubleshooting.md`; per-provider quirks: `references/p
 
 - Generating costs money and takes minutes. Never fan out paid requests without the user's intent.
 - Keep keys, signed URLs and endpoint internals out of committed files and public reports.
+- A `custom`/`command` profile is only as trustworthy as its template/hook: verify once with a cheap
+  `--dry-run` then a minimal real run before batch use. Read `references/custom-endpoints.md`.
 - Image-to-video needs a reference image the protocol accepts: Ark and MiniMax take local files
   (base64), DashScope needs a public URL. The CLI refuses locally with a hint instead of failing
   server-side.

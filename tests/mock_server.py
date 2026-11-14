@@ -146,6 +146,15 @@ def make_handler(state: State):
                 return self._json(
                     200, {"file": {"download_url": self._base() + "/files/minimax.mp4"}, "base_resp": {"status_code": 0}}
                 )
+            if path.startswith("/custom/tasks/"):
+                return self._json(
+                    200,
+                    {
+                        "state": "finished",
+                        "output": {"video_url": self._base() + "/files/custom.mp4"},
+                        "output_meta": {"duration": 4, "size": "640x360"},
+                    },
+                )
             if path.startswith("/files/"):
                 suffix = path.rsplit(".", 1)[-1]
                 if suffix == "mp4":
@@ -176,6 +185,10 @@ def make_handler(state: State):
                 return self._json(200, {"output": {"task_id": "t2"}})
             if path == "/v1/video_generation":
                 return self._json(200, {"task_id": "m1", "base_resp": {"status_code": 0, "status_msg": "ok"}})
+            if path == "/custom/t2i":
+                return self._json(200, {"data": {"image": B64_PNG}})
+            if path == "/custom/tasks":
+                return self._json(200, {"task": {"id": "c1"}})
             if path == "/v1/image_generation":
                 return self._json(200, {"data": {"image_base64": [B64_PNG]}, "base_resp": {"status_code": 0}})
             return self._json(404, {"error": {"message": f"no route {path}"}})

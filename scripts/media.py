@@ -59,8 +59,33 @@ def make_context(args) -> tuple[str, dict, object]:
         key=key,
         timeout=int(getattr(args, "timeout_seconds", 0) or 120),
     )
-    protocol = load_protocol(profile["protocol"])(endpoint)
+    spec = protocol_spec(name, profile)
+    protocol = load_protocol(profile["protocol"])(endpoint, spec)
     return name, profile, protocol
+
+
+def protocol_spec(name: str, profile: dict) -> dict | None:
+    """custom 读模板文件，command 读命令表；其余协议不需要 spec。"""
+    protocol = profile.get("protocol")
+    if protocol == "custom":
+        path = profile.get("custom_file") or str(config.custom_spec_path(name))
+        path = os.path.expanduser(path)
+        if not os.path.isfile(path):
+            die(f"custom 模板不存在：{path}；用 setup.sh add {name} --protocol custom --custom-file <文件>", 2)
+        try:
+            with open(path, encoding="utf-8") as handle:
+                spec = json.load(handle)
+        except ValueError as error:
+            die(f"custom 模板不是合法 JSON（{path}）：{error}", 2)
+        if not isinstance(spec, dict) or not ({"image", "video"} & set(spec)):
+            die(f"custom 模板至少要有 image 或 video 段：{path}", 2)
+        return spec
+    if protocol == "command":
+        commands = profile.get("command")
+        if not isinstance(commands, dict) or not commands:
+            die(f"command 协议需要在配置档里提供 command 命令表（setup.sh add {name} --protocol command --command-json …）", 2)
+        return {"command": commands}
+    return None
 
 
 def pick_model(args, profile: dict, kind: str) -> str:
@@ -384,7 +409,15 @@ def cmd_doctor(args) -> int:
         print(f"结果        FAIL  {error}")
         return 1
     if listed is None:
-        print("结果        OK    端点没有 /models（原生协议），按 --model 直接调用")
+        if profile["protocol"] == "custom":
+            spec_path = profile.get("custom_file") or config.custom_spec_path(name)
+            parts = [kind for kind in ("image", "video") if kind in (protocol_spec(name, profile) or {})]
+            print(f"结果        OK    custom 模板（{os.path.basename(str(spec_path))}）：支持 {', '.join(parts) or '（空）'}")
+        elif profile["protocol"] == "command":
+            commands = (profile.get("command") or {}).keys()
+            print(f"结果        OK    command 钩子：{', '.join(sorted(commands))}")
+        else:
+            print("结果        OK    端点没有 /models（原生协议），按 --model 直接调用")
         return 0
     media = [model for model in listed if registry.resolve(model) or registry.guess_kind(model) != "unknown"]
     print(f"结果        OK    GET /models 200，{len(listed)} 个模型")

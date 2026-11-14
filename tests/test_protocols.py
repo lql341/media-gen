@@ -182,6 +182,114 @@ class MinimaxTest(unittest.TestCase):
                 protocol._check({"base_resp": {"status_code": 1004, "status_msg": "invalid api key"}}, "请求")
 
 
+CUSTOM_SPEC = {
+    "image": {
+        "method": "POST", "path": "/custom/t2i",
+        "body": {"model": "{model}", "prompt": "{prompt}", "size": "{size}"},
+        "response": {"mode": "b64", "path": "data.image"},
+    },
+    "video": {
+        "create": {"method": "POST", "path": "/custom/tasks",
+                   "body": {"model": "{model}", "input": {"text": "{prompt}"}, "seconds": "{seconds}"}},
+        "task_id_path": "task.id",
+        "status": {"path": "/custom/tasks/{task_id}"},
+        "state": {"status_path": "state", "done": ["finished"], "failed": ["failed"],
+                  "video_url_path": "output.video_url",
+                  "seconds_path": "output_meta.duration", "size_path": "output_meta.size"},
+        "fetch": {"mode": "url"},
+    },
+}
+
+
+class CustomProtocolTest(unittest.TestCase):
+    def test_image_template(self):
+        with MockServer() as server:
+            protocol = load_protocol("custom")(
+                endpoint(server, "custom", "/"), CUSTOM_SPEC
+            )
+            result = protocol.image("any-model", "a cat", size="800x600", n=1, ref=None)
+            self.assertEqual(result.data, PNG)
+            body = [call for call in server.state.calls if call[1] == "/custom/t2i"][0][2]
+            self.assertEqual(body, {"model": "any-model", "prompt": "a cat", "size": "800x600"})
+
+    def test_video_flow_and_nested_paths(self):
+        with MockServer() as server:
+            protocol = load_protocol("custom")(endpoint(server, "custom", "/"), CUSTOM_SPEC)
+            task = protocol.video_create(
+                "any-model", "a cat", seconds=4, size=None, resolution=None, ratio=None, ref=None
+            )
+            self.assertEqual(task, "c1")
+            body = [call for call in server.state.calls if call[1] == "/custom/tasks"][0][2]
+            self.assertEqual(body["input"], {"text": "a cat"})
+            self.assertEqual(body["seconds"], 4)
+            state = protocol.video_status(task)
+            self.assertTrue(state.done)
+            self.assertEqual(state.seconds, "4")
+            self.assertEqual(state.size, "640x360")
+            self.assertEqual(protocol.video_fetch(task, state), MP4)
+
+    def test_missing_section_is_explained(self):
+        with MockServer() as server:
+            protocol = load_protocol("custom")(endpoint(server, "custom", "/"), {"video": {}})
+            with self.assertRaises(MediaError) as raised:
+                protocol.image("m", "p", size=None, n=1, ref=None)
+            self.assertIn("image", str(raised.exception))
+
+
+class CommandProtocolTest(unittest.TestCase):
+    def _hook(self, tmpdir: str) -> str:
+        script = os.path.join(tmpdir, "hook.sh")
+        with open(script, "w", encoding="utf-8") as handle:
+            handle.write(
+                "#!/usr/bin/env bash\nset -eu\naction=\"$1\"\n"
+                "case \"$action\" in\n"
+                "  image) printf '{\"b64\": \"UE5HREFUQQ==\"}' ;;\n"
+                "  create) printf '{\"task_id\": \"t-1\"}' ;;\n"
+                "  status) printf '{\"status\": \"completed\", \"seconds\": 4}' ;;\n"
+                "  fetch) printf 'MP4DATA' ;;\n"
+                "  boom) echo 'nope' >&2; exit 3 ;;\n"
+                "esac\n"
+            )
+        os.chmod(script, 0o755)
+        return script
+
+    def test_image_and_video(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hook = self._hook(tmpdir)
+            spec = {"command": {"image": f"{hook} image", "create": f"{hook} create",
+                                "status": f"{hook} status", "fetch": f"{hook} fetch"}}
+            server = MockServer()
+            protocol = load_protocol("command")(endpoint(server, "command", "/"), spec)
+            self.assertEqual(protocol.image("m", "p", size=None, n=1, ref=None).data, b"PNGDATA")
+            task = protocol.video_create("m", "p", seconds=4, size=None, resolution=None, ratio=None, ref=None)
+            self.assertEqual(task, "t-1")
+            state = protocol.video_status(task)
+            self.assertTrue(state.done)
+            self.assertEqual(state.seconds, "4")
+            self.assertEqual(protocol.video_fetch(task, state), b"MP4DATA")
+
+    def test_failure_carries_stderr(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hook = self._hook(tmpdir)
+            spec = {"command": {"image": f"{hook} boom"}}
+            server = MockServer()
+            protocol = load_protocol("command")(endpoint(server, "command", "/"), spec)
+            with self.assertRaises(MediaError) as raised:
+                protocol.image("m", "p", size=None, n=1, ref=None)
+            self.assertIn("nope", str(raised.exception))
+
+    def test_missing_command_is_explained(self):
+        server = MockServer()
+        protocol = load_protocol("command")(endpoint(server, "command", "/"), {"command": {}})
+        with self.assertRaises(MediaError) as raised:
+            protocol.video_status("t-1")
+        self.assertIn("command.status", str(raised.exception))
+
+
 class ErrorShapeTest(unittest.TestCase):
     def test_http_error_message_is_extracted(self):
         with MockServer() as server:

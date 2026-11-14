@@ -71,9 +71,40 @@ check "migrate 生成配置档" "old" "$("$PY" "$CFG" list)"
 check "migrate 保留地址" "https://legacy.example/v1" "$("$PY" "$CFG" get-base-url --profile old)"
 check "migrate 保留密钥" "legacy-agent-key-99887766" "$("$PY" "$CFG" get-key --profile old)"
 
-echo "== 删除"
-"$PY" "$CFG" rm old >/dev/null
-expect_exit "删除后不再存在" 2 "$PY" "$CFG" get-base-url --profile old
+echo "== 生命周期：改地址 / 换密钥 / 改名 / 查看 / 导出导入"
+printf 'lifecycle-key-11112222' | "$PY" "$CFG" add default --protocol openai \
+  --base-url https://life.example/v1 --store file --key-stdin --set-default >/dev/null
+"$PY" "$CFG" set-url default --base-url https://moved.example/v2 >/dev/null
+check "set-url 生效" "https://moved.example/v2" "$("$PY" "$CFG" get-base-url --profile default)"
+printf 'rotated-key-99998888' | "$PY" "$CFG" set-key default --store file >/dev/null
+check "set-key 生效" "rotated-key-99998888" "$("$PY" "$CFG" get-key --profile default)"
+out=$("$PY" "$CFG" show default)
+check "show 脱敏" "…8888" "$out"
+if printf '%s' "$out" | grep -q "rotated-key-99998888"; then echo "FAIL  show 泄露密钥"; fail=1; else echo "ok    show 不泄露密钥"; fi
+"$PY" "$CFG" rename default primary >/dev/null
+check "rename 后新名字可用" "https://moved.example/v2" "$("$PY" "$CFG" get-base-url --profile primary)"
+expect_exit "rename 后旧名字消失" 2 "$PY" "$CFG" get-base-url --profile default
+"$PY" "$CFG" export >"$TMP/export.json"
+if grep -q "api_key" "$TMP/export.json"; then echo "FAIL  export 里出现密钥字段"; fail=1; else echo "ok    export 不含密钥字段"; fi
+check "export 保留地址" '"base_url"' "$(cat "$TMP/export.json")"
+"$PY" "$CFG" import "$TMP/export.json" >/dev/null
+check "import 保留配置档" "primary" "$("$PY" "$CFG" list)"
+
+echo "== 非官方端点：custom 模板与 command 钩子"
+printf '{"image":{"path":"/t2i","body":{"prompt":"{prompt}"},"response":{"mode":"b64","path":"data.image"}}}' >"$TMP/custom.json"
+"$PY" "$CFG" add inhouse --protocol custom --base-url https://inhouse.example/api --custom-file "$TMP/custom.json" --store file >/dev/null
+check "custom 协议写入" "custom" "$("$PY" "$CFG" get-protocol --profile inhouse)"
+check "custom 模板已落地" "1" "$(ls "$HOME/.config/media-gen/custom/" | wc -l | tr -d ' ')"
+"$PY" "$CFG" add hooky --protocol command --base-url unused://inhouse \
+  --command-json '{"image":"echo {}","create":"echo {}","status":"echo {}","fetch":"echo {}"}' --store file >/dev/null
+check "command 协议写入" "command" "$("$PY" "$CFG" get-protocol --profile hooky)"
+"$PY" "$CFG" rm hooky >/dev/null
+expect_exit "command 配置档已删除" 2 "$PY" "$CFG" get-base-url --profile hooky
+"$PY" "$CFG" rm --all >/dev/null
+# 删完全部配置档后，只剩从旧 seedance 目录自动识别的 legacy 档（本测试前面造过）
+check "rm --all 后只剩 legacy 回退档" "legacy" "$("$PY" "$CFG" list)"
+if "$PY" "$CFG" list | grep -q "primary"; then echo "FAIL  rm --all 后仍能看到 primary"; fail=1; else echo "ok    rm --all 后 primary 已消失"; fi
+
 
 echo
 if [ "$fail" = 0 ]; then echo "全部通过"; else echo "有失败项"; exit 1; fi

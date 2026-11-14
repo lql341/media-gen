@@ -41,11 +41,30 @@ import urllib.request
 
 SERVICE = "media-gen"
 LEGACY_SERVICE = "seedance-gateway"
-PROTOCOLS = ("openai", "ark", "dashscope", "minimax")
+PROTOCOLS = ("openai", "ark", "dashscope", "minimax", "custom", "command")
 
 ENV_KEY = ("MEDIA_API_KEY", "SEEDANCE_API_KEY", "LEGACY_API_KEY")
 ENV_BASE = ("MEDIA_BASE_URL", "SEEDANCE_BASE_URL", "LEGACY_BASE_URL")
 PROFILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$")
+
+
+def pathlib_read(path: str) -> str:
+    with open(os.path.expanduser(path), encoding="utf-8") as handle:
+        return handle.read()
+
+
+def validate_base_url(protocol: str, base: str) -> str:
+    """command 协议可以拿占位地址（如 unused://inhouse），其余必须是 http(s)。"""
+    base = base.strip().rstrip("/")
+    if not base:
+        raise ConfigError("--base-url 不能为空")
+    if protocol == "command":
+        if "://" not in base:
+            raise ConfigError("command 协议的 --base-url 只是标识，可以是 unused://<name>")
+        return base
+    if not re.match(r"^https?://", base):
+        raise ConfigError("--base-url 必须是 http(s):// 开头的绝对地址")
+    return base
 
 
 class ConfigError(RuntimeError):
@@ -63,6 +82,10 @@ def config_dir() -> str:
 
 def config_file() -> str:
     return os.path.join(config_dir(), "config.json")
+
+
+def custom_spec_path(profile: str) -> str:
+    return os.path.join(config_dir(), "custom", f"{profile}.json")
 
 
 def registry_override_file() -> str:
@@ -180,7 +203,7 @@ def require_profile(explicit: str | None = None) -> tuple[str, dict]:
             )
         raise ConfigError(
             "还没有任何配置档；运行 scripts/setup.sh add <name> --protocol <openai|ark|dashscope|minimax> "
-            "--base-url https://host/v1"
+            "--base-url https://host/v1（custom/command 见 references/custom-endpoints.md）"
         )
     profile = dict(profiles()[name])
     protocol = str(profile.get("protocol", "openai"))
@@ -397,6 +420,21 @@ def _manage(args) -> int:
     if args.command == "rm":
         config = read_config()
         found = config.get("profiles") or {}
+        if getattr(args, "all", False):
+            names = list(found)
+            for name in names:
+                if not args.keep_key:
+                    delete_key(name)
+                spec = custom_spec_path(name)
+                if os.path.exists(spec):
+                    os.remove(spec)
+            config.pop("profiles", None)
+            config.pop("default", None)
+            write_config(config)
+            print(f"已删除 {len(names)} 个配置档" + ("" if args.keep_key else "，并清除其密钥"))
+            return 0
+        if not args.name:
+            raise ConfigError("rm 需要一个配置档名，或用 --all 删除全部")
         if args.name not in found:
             raise ConfigError(f"没有名为 {args.name} 的配置档")
         del found[args.name]
@@ -405,6 +443,9 @@ def _manage(args) -> int:
             config.pop("default", None)
         write_config(config)
         removed_key = False if args.keep_key else delete_key(args.name)
+        spec = custom_spec_path(args.name)
+        if os.path.exists(spec):
+            os.remove(spec)
         print(f"已删除配置档 {args.name}" + ("，并清除其密钥" if removed_key else ""))
         return 0
 
@@ -447,6 +488,153 @@ def _manage(args) -> int:
         print(f"已迁移到配置档 {args.name}（来源：{legacy_source}）")
         return 0
 
+    if args.command == "show":
+        found = profiles()
+        if args.name not in found:
+            raise ConfigError(f"没有名为 {args.name} 的配置档")
+        profile = dict(found[args.name])
+        key, key_source = resolve_key(args.name, profile)
+        profile.pop("api_key", None)
+        print(json.dumps({"profile": args.name, "config": profile, "key_source": key_source,
+                          "key": mask(key) if key else None}, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "set-key":
+        if args.name not in profiles():
+            raise ConfigError(f"没有名为 {args.name} 的配置档")
+        key = normalize_secret(sys.stdin.read())
+        config = read_config()
+        entry = dict((config.get("profiles") or {})[args.name])
+        if args.store == "file":
+            entry["api_key"] = key
+            profiles_block = dict(config.get("profiles") or {})
+            profiles_block[args.name] = entry
+            config["profiles"] = profiles_block
+            write_config(config)
+            print(f"密钥已写入 {config_file()}（0600 明文）")
+        else:
+            provider = store_key(args.name, key)
+            entry.pop("api_key", None)
+            profiles_block = dict(config.get("profiles") or {})
+            profiles_block[args.name] = entry
+            config["profiles"] = profiles_block
+            write_config(config)
+            print(f"密钥已写入 {provider}")
+        return 0
+
+    if args.command == "set-url":
+        config = read_config()
+        block = config.get("profiles") or {}
+        if args.name not in block:
+            raise ConfigError(f"没有名为 {args.name} 的配置档")
+        base = validate_base_url(block[args.name].get("protocol", "openai"), args.base_url)
+        block[args.name]["base_url"] = base
+        config["profiles"] = block
+        write_config(config)
+        print(f"{args.name} 的地址 → {base}")
+        return 0
+
+    if args.command == "set-protocol":
+        config = read_config()
+        block = config.get("profiles") or {}
+        if args.name not in block:
+            raise ConfigError(f"没有名为 {args.name} 的配置档")
+        entry = dict(block[args.name])
+        entry["protocol"] = args.protocol
+        entry.pop("custom_file", None)
+        entry.pop("command", None)
+        if args.protocol == "custom":
+            if not args.custom_file:
+                raise ConfigError("custom 协议需要 --custom-file")
+            spec = read_json(os.path.expanduser(args.custom_file))
+            if not isinstance(spec, dict) or not ({"image", "video"} & set(spec)):
+                raise ConfigError("模板文件至少要有 image 或 video 段")
+            target = custom_spec_path(args.name)
+            write_json(target, spec)
+            entry["custom_file"] = target
+            print(f"模板已复制到 {target}")
+        elif args.protocol == "command":
+            raw = args.command_json or (pathlib_read(args.command_file) if args.command_file else "")
+            if not raw:
+                raise ConfigError("command 协议需要 --command-json 或 --command-file")
+            try:
+                commands = json.loads(raw)
+            except ValueError as error:
+                raise ConfigError(f"命令表不是合法 JSON：{error}") from None
+            entry["command"] = {str(k): str(v) for k, v in commands.items()}
+        block[args.name] = entry
+        config["profiles"] = block
+        write_config(config)
+        print(f"{args.name} 的协议 → {args.protocol}")
+        return 0
+
+    if args.command == "rename":
+        config = read_config()
+        block = config.get("profiles") or {}
+        if args.old not in block:
+            raise ConfigError(f"没有名为 {args.old} 的配置档")
+        if not PROFILE_RE.match(args.new):
+            raise ConfigError("新名字只能用字母、数字、点、下划线、横线（≤32）")
+        if args.new in block:
+            raise ConfigError(f"{args.new} 已存在")
+        entry = dict(block.pop(args.old))
+        block[args.new] = entry
+        config["profiles"] = block
+        if config.get("default") == args.old:
+            config["default"] = args.new
+        write_config(config)
+        moved_key = False
+        stored = _read_store(SERVICE, args.old)
+        if stored:
+            store_key(args.new, stored)
+            delete_key(args.old)
+            moved_key = True
+        if entry.get("custom_file"):
+            old_spec = custom_spec_path(args.old)
+            if os.path.exists(old_spec):
+                os.replace(old_spec, custom_spec_path(args.new))
+                block[args.new]["custom_file"] = custom_spec_path(args.new)
+                write_config(config)
+        print(f"{args.old} → {args.new}" + ("（密钥条目已搬移）" if moved_key else ""))
+        return 0
+
+    if args.command == "export":
+        config = read_config()
+        block = {}
+        for name, entry in (config.get("profiles") or {}).items():
+            clean = {key: value for key, value in entry.items() if key != "api_key"}
+            if clean.get("custom_file"):
+                clean["custom_file_content"] = read_json(clean["custom_file"])
+            block[name] = clean
+        print(json.dumps({"version": 1, "default": config.get("default"), "profiles": block},
+                         ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "import":
+        payload = read_json(os.path.expanduser(args.file))
+        incoming = payload.get("profiles") if isinstance(payload, dict) else None
+        if not isinstance(incoming, dict) or not incoming:
+            raise ConfigError('导入文件需要 {"profiles": {...}}')
+        config = read_config()
+        block = dict(config.get("profiles") or {})
+        for name, entry in incoming.items():
+            if not PROFILE_RE.match(name):
+                continue
+            entry = dict(entry)
+            embedded = entry.pop("custom_file_content", None)
+            if embedded:
+                write_json(custom_spec_path(name), embedded)
+                entry["custom_file"] = custom_spec_path(name)
+            block[name] = entry
+        config["profiles"] = block
+        if payload.get("default") in block and not config.get("default"):
+            config["default"] = payload["default"]
+        elif not config.get("default") and len(block) == 1:
+            config["default"] = next(iter(block))
+        write_config(config)
+        print(f"已导入 {len(incoming)} 个配置档（密钥需另行 set-key）")
+        return 0
+
     # add
     if not PROFILE_RE.match(args.name):
         raise ConfigError("配置档名只能包含字母、数字、点、下划线、横线（最多 32 字符）")
@@ -455,10 +643,40 @@ def _manage(args) -> int:
     found = found if isinstance(found, dict) else {}
     entry = dict(found.get(args.name) or {})
     entry["protocol"] = args.protocol
-    base = args.base_url.strip().rstrip("/")
-    if not re.match(r"^https?://", base):
-        raise ConfigError("--base-url 必须是 http(s):// 开头的绝对地址")
+    base = validate_base_url(args.protocol, args.base_url)
     entry["base_url"] = base
+    if args.protocol == "custom":
+        if not args.custom_file:
+            raise ConfigError("custom 协议需要 --custom-file <模板文件>（见 references/custom-endpoints.md）")
+        source = os.path.expanduser(args.custom_file)
+        with open(source, encoding="utf-8") as handle:
+            try:
+                spec = json.load(handle)
+            except ValueError as error:
+                raise ConfigError(f"模板文件不是合法 JSON：{error}") from None
+        if not isinstance(spec, dict) or not ({"image", "video"} & set(spec)):
+            raise ConfigError("模板文件至少要有 image 或 video 段")
+        target = custom_spec_path(args.name)
+        write_json(target, spec)
+        entry["custom_file"] = target
+        print(f"模板已复制到 {target}")
+    elif args.protocol == "command":
+        if args.command_json:
+            try:
+                commands = json.loads(args.command_json)
+            except ValueError as error:
+                raise ConfigError(f"--command-json 不是合法 JSON：{error}") from None
+        elif args.command_file:
+            commands = json.loads(pathlib_read(args.command_file))
+        else:
+            raise ConfigError('command 协议需要 --command-json 或 --command-file（至少 create/status/fetch）')
+        if not isinstance(commands, dict) or not ({"image", "create"} & set(commands)):
+            raise ConfigError("命令表至少要有 image，或 create + status + fetch")
+        entry["command"] = {str(k): str(v) for k, v in commands.items()}
+    else:
+        entry.pop("custom_file", None)
+        entry.pop("command", None)
+
     defaults = dict(entry.get("default_models") or {})
     if args.default_image:
         defaults["image"] = args.default_image
@@ -478,8 +696,6 @@ def _manage(args) -> int:
         else:
             entry.pop("api_key", None)
             print(f"密钥已写入 {store_key(args.name, key)}")
-    elif entry.get("api_key") and args.store == "auto":
-        raise ConfigError("配置里已有明文 api_key；要用系统凭据库请先 setup.sh rm 再重新添加")
     found[args.name] = entry
     config["profiles"] = found
     if args.set_default or not config.get("default"):
@@ -514,19 +730,47 @@ def main(argv: list[str] | None = None) -> int:
     p_add.add_argument("--default-image")
     p_add.add_argument("--default-video")
     p_add.add_argument("--set-default", action="store_true")
+    p_add.add_argument("--custom-file", help="custom 协议的模板文件（会复制到 ~/.config/media-gen/custom/<name>.json）")
+    p_add.add_argument("--command-json", help='command 协议的命令表，如 {"create":"…","status":"…","fetch":"…"}')
+    p_add.add_argument("--command-file", help="command 命令表的 JSON 文件")
     p_use = sub.add_parser("use", help="设为默认配置档")
     p_use.add_argument("name")
-    p_rm = sub.add_parser("rm", help="删除配置档")
-    p_rm.add_argument("name")
+    p_rm = sub.add_parser("rm", help="删除配置档（--all 删全部）")
+    p_rm.add_argument("name", nargs="?")
     p_rm.add_argument("--keep-key", action="store_true")
+    p_rm.add_argument("--all", action="store_true", help="删除所有配置档（含密钥条目）")
     sub.add_parser("list", help="列出配置档")
+    p_show = sub.add_parser("show", help="显示某个配置档的完整配置（密钥脱敏）")
+    p_show.add_argument("name")
+    p_setkey = sub.add_parser("set-key", help="只换密钥（stdin）")
+    p_setkey.add_argument("name")
+    p_setkey.add_argument("--store", choices=("auto", "file"), default="auto")
+    p_setkey.add_argument("--no-verify", action="store_true")
+    p_seturl = sub.add_parser("set-url", help="只换地址")
+    p_seturl.add_argument("name")
+    p_seturl.add_argument("--base-url", required=True)
+    p_setproto = sub.add_parser("set-protocol", help="只换协议（必要时配套 --custom-file / --command-json）")
+    p_setproto.add_argument("name")
+    p_setproto.add_argument("--protocol", required=True, choices=PROTOCOLS)
+    p_setproto.add_argument("--custom-file")
+    p_setproto.add_argument("--command-json")
+    p_setproto.add_argument("--command-file")
+    p_rename = sub.add_parser("rename", help="重命名配置档（密钥条目一起搬）")
+    p_rename.add_argument("old")
+    p_rename.add_argument("new")
+    p_export = sub.add_parser("export", help="导出配置（不含密钥）到 stdout")
+    p_import = sub.add_parser("import", help="导入配置（文件里不应有密钥）")
+    p_import.add_argument("file")
     p_mig = sub.add_parser("migrate", help="把旧的 seedance 配置/凭据迁到 media-gen")
     p_mig.add_argument("--name", default="legacy")
     p_mig.add_argument("--store", choices=("auto", "file"), default="auto")
     args = parser.parse_args(argv)
 
     try:
-        if args.command in ("add", "use", "rm", "list", "migrate"):
+        if args.command in (
+            "add", "use", "rm", "list", "migrate", "show", "set-key", "set-url",
+            "set-protocol", "rename", "export", "import",
+        ):
             return _manage(args)
         name, profile = require_profile(args.profile)
         key, key_source = resolve_key(name, profile)
