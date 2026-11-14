@@ -114,6 +114,23 @@ def data_uri(path: str) -> str:
     return f"data:{mime};base64,{payload}"
 
 
+def write_atomic(path: str, payload: bytes) -> None:
+    """先写 ``<path>.part`` 再 rename：中断/失败不会留下半个文件。"""
+    directory = os.path.dirname(os.path.abspath(path))
+    os.makedirs(directory, exist_ok=True)
+    temporary = f"{path}.part"
+    try:
+        with open(temporary, "wb") as handle:
+            handle.write(payload)
+        os.replace(temporary, path)
+    except OSError:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
 class Protocol:
     name = ""
     supports = ("image", "video")
@@ -124,6 +141,23 @@ class Protocol:
 
     # ---------------------------------------------------------------- http
 
+    def _with_query(self, url: str) -> str:
+        if not self.endpoint.query:
+            return url
+        separator = "&" if "?" in url else "?"
+        return url + separator + urllib.parse.urlencode(self.endpoint.query)
+
+    def _build_headers(self, auth: bool, extra: dict | None = None) -> dict:
+        """auth < profile 固定头 < 调用方显式头。"""
+        headers: dict[str, str] = {}
+        if auth and self.endpoint.key:
+            headers["Authorization"] = f"Bearer {self.endpoint.key}"
+        if self.endpoint.headers:
+            headers.update({str(k): str(v) for k, v in self.endpoint.headers.items()})
+        if extra:
+            headers.update(extra)
+        return headers
+
     def _request(
         self,
         method: str,
@@ -132,24 +166,15 @@ class Protocol:
         headers: dict | None = None,
         auth: bool = True,
     ) -> tuple[int, dict, bytes]:
-        if self.endpoint.query:
-            import urllib.parse as _parse
-
-            separator = "&" if "?" in url else "?"
-            url = url + separator + _parse.urlencode(self.endpoint.query)
+        url = self._with_query(url)
         data = None
-        request_headers = {"Accept": "application/json"}
+        extra = {"Accept": "application/json"}
         if isinstance(body, dict):
             data = json.dumps(body).encode("utf-8")
-            request_headers["Content-Type"] = "application/json"
+            extra["Content-Type"] = "application/json"
         elif isinstance(body, bytes):
             data = body
-        if auth and self.endpoint.key:
-            request_headers["Authorization"] = f"Bearer {self.endpoint.key}"
-        if self.endpoint.headers:
-            request_headers.update({str(k): str(v) for k, v in self.endpoint.headers.items()})
-        if headers:
-            request_headers.update(headers)
+        request_headers = self._build_headers(auth, {**extra, **(headers or {})})
         attempts = 1 + (retry_count() if method == "GET" else 0)
         last: tuple[int, dict, bytes] | None = None
         for attempt in range(attempts):
@@ -217,6 +242,57 @@ class Protocol:
             raise MediaError(f"下载 {url} → {status}")
         return raw
 
+    def download(self, url: str, path: str, *, chunk: int = 1 << 20) -> int:
+        """把产物流式写到 ``path``（先 ``.part`` 再原子替换），返回字节数。
+
+        视频动辄几十上百 MB，不再整块读进内存；只在还没有写入任何字节时重试，
+        否则可能把一段残片当成完整文件保留下来。
+        """
+        url = self._with_query(url)
+        headers = self._build_headers(self._same_origin(url), {"Accept": "*/*"})
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        temporary = f"{path}.part"
+        attempts = 1 + retry_count()
+        for attempt in range(attempts):
+            written = 0
+            try:
+                request = urllib.request.Request(url, headers=headers, method="GET")
+                with urllib.request.urlopen(request, timeout=self.endpoint.timeout) as response:
+                    with open(temporary, "wb") as handle:
+                        while True:
+                            block = response.read(chunk)
+                            if not block:
+                                break
+                            handle.write(block)
+                            written += len(block)
+                os.replace(temporary, path)
+                return written
+            except urllib.error.HTTPError as error:
+                self._drop(temporary)
+                if error.code in (429, 500, 502, 503, 504) and attempt + 1 < attempts:
+                    import time as _time
+
+                    _time.sleep(0.5 * (2 ** attempt))
+                    continue
+                raise MediaError(f"下载 {url} → {error.code}") from None
+            except (urllib.error.URLError, OSError) as error:
+                self._drop(temporary)
+                if written == 0 and attempt + 1 < attempts:
+                    import time as _time
+
+                    _time.sleep(0.5 * (2 ** attempt))
+                    continue
+                reason = getattr(error, "reason", error)
+                raise MediaError(f"下载 {url} 失败（已写 {written} 字节）：{reason}") from None
+        raise MediaError(f"下载 {url} 失败")
+
+    @staticmethod
+    def _drop(path: str) -> None:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
     # ------------------------------------------------------------ interface
 
     def list_models(self) -> list[str] | None:
@@ -253,6 +329,14 @@ class Protocol:
 
     def video_fetch(self, task_id: str, state: VideoState) -> bytes:
         raise MediaError(f"{self.name} 协议不支持视频下载")
+
+    def video_download(self, task_id: str, state: VideoState, path: str) -> int:
+        """把完成的视频写到 path。有直链就流式下载，只有字节的协议退回 video_fetch。"""
+        if state.url:
+            return self.download(state.url, path)
+        payload = self.video_fetch(task_id, state)
+        write_atomic(path, payload)
+        return len(payload)
 
 
 def retry_count() -> int:

@@ -256,6 +256,15 @@ class OpenAIProtocol(Protocol):
         )
         return state
 
+    def video_download(self, task_id: str, state: VideoState, path: str) -> int:
+        """优先流式拉 /videos/<id>/content（带凭据）；网关没这条路由时退回 result.url。"""
+        try:
+            return self.download(self.endpoint.base_url + f"/videos/{task_id}/content", path)
+        except MediaError as error:
+            if not state.url:
+                raise MediaError(str(error)) from None
+            return self.download(state.url, path)
+
     def video_fetch(self, task_id: str, state: VideoState) -> bytes:
         status, _, raw = self._request("GET", self.endpoint.base_url + f"/videos/{task_id}/content")
         if status < 400 and raw:

@@ -25,7 +25,7 @@ import time
 
 import media_config as config
 import registry
-from protocols import Endpoint, MediaError, VideoState, load_protocol
+from protocols import Endpoint, MediaError, VideoState, load_protocol, write_atomic
 
 DEFAULT_INTERVAL = int(os.environ.get("MEDIA_POLL_INTERVAL", "10"))
 DEFAULT_TIMEOUT = int(os.environ.get("MEDIA_POLL_TIMEOUT", "1800"))
@@ -153,10 +153,7 @@ def capability_line(model: str) -> str:
 
 
 def write_artifact(path: str, payload: bytes) -> None:
-    directory = os.path.dirname(os.path.abspath(path))
-    os.makedirs(directory, exist_ok=True)
-    with open(path, "wb") as handle:
-        handle.write(payload)
+    write_atomic(path, payload)
 
 
 def variant_path(base: str, index: int, suffix: str | None) -> str:
@@ -416,14 +413,13 @@ def cmd_video(args) -> int:
             print(task_id)
             return 0
         state = wait_for(protocol, task_id, args.timeout, args.interval)
-        payload = protocol.video_fetch(task_id, state)
         out = out_path(args.out, "video")
-        write_artifact(out, payload)
+        size = protocol.video_download(task_id, state, out)
         save_last_frame(protocol, state, getattr(args, "last_frame", None))
         record_task({"id": task_id, "kind": "video", "model": model, "profile": name,
                      "status": state.status, "seconds": state.seconds, "size": state.size,
                      "file": out, "url": state.url, "usage": state.usage})
-        announce(f"完成：{len(payload)} 字节")
+        announce(f"完成：{size} 字节")
         if getattr(args, "json", False):
             print(json.dumps({"ok": True, "task_id": task_id, "file": out,
                               "seconds": state.seconds, "size": state.size,
@@ -450,9 +446,8 @@ def cmd_video(args) -> int:
         print(task_id)
         return 0
     state = wait_for(protocol, task_id, args.timeout, args.interval)
-    payload = protocol.video_fetch(task_id, state)
     out = out_path(args.out, "video")
-    write_artifact(out, payload)
+    size = protocol.video_download(task_id, state, out)
     save_last_frame(protocol, state, getattr(args, "last_frame", None))
     announce(
         "完成："
@@ -461,7 +456,7 @@ def cmd_video(args) -> int:
             for part in (
                 f"{state.seconds}s" if state.seconds else "",
                 state.size or "",
-                f"{len(payload)} 字节",
+                f"{size} 字节",
             )
             if part
         )
@@ -581,10 +576,9 @@ def cmd_download(args) -> int:
     state = protocol.video_status(args.task_id)
     if not state.done:
         die(f"任务 {args.task_id} 尚未完成（{state.status}）；先运行 wait")
-    payload = protocol.video_fetch(args.task_id, state)
     out = out_path(args.out, "video")
-    write_artifact(out, payload)
-    announce(f"{len(payload)} 字节")
+    size = protocol.video_download(args.task_id, state, out)
+    announce(f"{size} 字节")
     save_last_frame(protocol, state, getattr(args, "last_frame", None))
     print(out)
     return 0

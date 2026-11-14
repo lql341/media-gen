@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.13.0 - 2026-11-15
+
+视频不再整块进内存；第一次有 CI。
+
+- **流式下载**：`Protocol.download(url, path)` 分块写 `<path>.part`，成功后 `os.replace` 到最终路径。
+  失败/中断不会留下半个 mp4 覆盖掉上一次的好文件；只在还没写入任何字节时才重试 5xx/429。
+- `Protocol.video_download(task_id, state, path)`：有直链的协议（ark / dashscope / minimax）直接流式落盘，
+  `openai` 优先拉 `/videos/<id>/content`，网关没这条路由再退回 `result.url`；只有字节的协议
+  （`custom` / `command`）退回 `video_fetch` + 原子写。
+- `write_artifact()` 改走同一个 `write_atomic()`，图片落盘也变成“要么完整、要么没有”。
+- **CI**（`.github/workflows/tests.yml`）：ubuntu/macos × python 3.9/3.12 跑 `tests/run-all.sh`，
+  Windows 任务跑纯 Python 的 registry + MCP 两套；全部离线，不产生费用。
+
 ## 0.12.0 - 2026-11-15
 
 MCP 通道补齐到与 CLI 同等的能力面（GUI 客户端读不到 SKILL.md，缺一个入参就是没法用）。

@@ -30,3 +30,6 @@ seedance/config.json
 # Python
 __pycache__/
 *.pyc
+
+# 下载未完成时的临时文件
+*.part

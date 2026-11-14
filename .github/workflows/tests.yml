@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    name: ${{ matrix.os }} · py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      # 全套离线测试：mock 端点、零花费、不读也不写系统凭据库
+      - run: bash tests/run-all.sh
+      - name: 失败时保留测试日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-gen-test-${{ matrix.os }}-py${{ matrix.python }}
+          path: /tmp/media-gen-test.log
+          if-no-files-found: ignore
+
+  windows:
+    name: windows-latest · py3.12
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # bash 驱动的套件在 Git Bash 下另说；这两个是纯 Python，能覆盖 Windows 分支与 MCP 通道
+      - shell: bash
+        run: |
+          python tests/test_registry.py
+          python tests/test_mcp.py

@@ -126,6 +126,25 @@ class MinimaxProtocol(Protocol):
             state.extra["file_id"] = payload["file_id"]
         return state
 
+    def video_download(self, task_id: str, state: VideoState, path: str) -> int:
+        """先查 download_url，再流式落盘（视频不再整块进内存）。"""
+        return self.download(self._download_url(task_id, state), path)
+
+    def _download_url(self, task_id: str, state: VideoState) -> str:
+        file_id = state.extra.get("file_id") if isinstance(state.extra, dict) else None
+        if not file_id:
+            raise MediaError(f"MiniMax 任务 {task_id} 没有 file_id，无法取回文件")
+        status_code, payload, raw = self._request(
+            "GET", self.endpoint.base_url + f"/files/retrieve?file_id={file_id}"
+        )
+        if status_code >= 400:
+            raise MediaError(f"GET /files/retrieve → {status_code}：{_text(payload, raw)}")
+        self._check(payload, "MiniMax 文件检索")
+        url = (payload.get("file") or {}).get("download_url")
+        if not url:
+            raise MediaError(f"MiniMax 文件检索没有 download_url：{json.dumps(payload)[:300]}")
+        return str(url)
+
     def video_fetch(self, task_id: str, state: VideoState) -> bytes:
         file_id = state.extra.get("file_id") if isinstance(state.extra, dict) else None
         if not file_id:

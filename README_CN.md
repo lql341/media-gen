@@ -122,7 +122,8 @@ bash tests/run-all.sh     # 六套离线测试：registry 单测、六种协议 
 [`references/gui-clients.md`](references/gui-clients.md)。
 
 协议适配器是对着 `tests/mock_server.py`（按各家文档实现的本地 mock）跑的，**不联网、不要账号、不花钱**。
-仓库不配 CI（私有仓库 + Actions 分钟数不免费）。
+CI 在 ubuntu/macos × python 3.9/3.12 上跑同一套离线测试，另有 Windows 任务跑纯 Python 部分；
+全部离线，绿色构建不产生任何费用。
 
 ## 迁移
 

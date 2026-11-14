@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -497,6 +498,36 @@ class GatewayExtrasTest(unittest.TestCase):
             protocol.video_list("m")
             self.assertTrue(any(h.get("openai-organization") == "org_test" for h in server.state.headers))
             self.assertTrue(any("api-version=2024-10-21" in q for q in server.state.queries))
+
+    def test_download_streams_to_disk_without_part_files(self):
+        with MockServer() as server, tempfile.TemporaryDirectory() as tmp:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            path = os.path.join(tmp, "v.mp4")
+            size = protocol.download(server.url("/v1/videos/video_1/content"), path, chunk=4)
+            self.assertEqual(size, len(MP4))
+            with open(path, "rb") as handle:
+                self.assertEqual(handle.read(), MP4)
+            self.assertFalse(os.path.exists(path + ".part"))
+
+    def test_download_failure_leaves_nothing_behind(self):
+        with MockServer() as server, tempfile.TemporaryDirectory() as tmp:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            path = os.path.join(tmp, "v.mp4")
+            with self.assertRaises(MediaError):
+                protocol.download(server.url("/v1/nope"), path)
+            self.assertFalse(os.path.exists(path))
+            self.assertFalse(os.path.exists(path + ".part"))
+
+    def test_video_download_writes_the_file(self):
+        with MockServer() as server, tempfile.TemporaryDirectory() as tmp:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            task = protocol.video_create("doubao-seedance-2-5", "x", seconds=4, size=None,
+                                         resolution=None, ratio=None, ref=None)
+            protocol.video_status(task)
+            state = protocol.video_status(task)
+            path = os.path.join(tmp, "done.mp4")
+            self.assertEqual(protocol.video_download(task, state, path), len(MP4))
+            self.assertEqual(os.path.getsize(path), len(MP4))
 
     def test_fetch_auth_is_bound_to_the_host_not_a_string_prefix(self):
         # 只比字符串前缀时，“https://gw.example.com.evil.net”也会带上 Authorization

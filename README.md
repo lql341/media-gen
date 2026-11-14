@@ -1,5 +1,7 @@
 # media-gen — image and video generation skill for coding agents
 
+[![tests](https://github.com/lql341/media-gen/actions/workflows/tests.yml/badge.svg)](https://github.com/lql341/media-gen/actions/workflows/tests.yml)
+
 An [Agent Skill](https://agentskills.io/specification) that generates **images and videos** through
 any endpoint you configure: an OpenAI-compatible gateway (LiteLLM, OpenAI), or a provider's native
 API (Volcengine Ark, Alibaba DashScope/Wan, MiniMax). No vendor and no gateway is hard-coded.
@@ -152,7 +154,9 @@ Six suites, all offline: registry unit tests, protocol adapters against a script
 (create → poll → download, request bodies inspected), configuration/credential precedence in a
 temp `HOME`, the interactive wizard (piped answers), the MCP server over stdio, and CLI end-to-end
 through the mock. No network, no account, no spend, **and no keyring access**
-(`MEDIA_CREDENTIAL_STORE=none`, asserted). There is no CI workflow on purpose.
+(`MEDIA_CREDENTIAL_STORE=none`, asserted). CI runs the same script on ubuntu/macos ×
+python 3.9/3.12, plus a Windows job for the pure-Python suites — every job is offline, so a
+green build costs nothing and proves nothing was sent to a paid endpoint.
 
 ## Before publishing
 
