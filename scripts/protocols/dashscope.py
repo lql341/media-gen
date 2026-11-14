@@ -46,11 +46,11 @@ class DashScopeProtocol(Protocol):
 
     def image(
         self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None,
-        mask: str | None = None,
+        mask: str | None = None, params: dict | None = None,
     ) -> list[ImageResult]:
         if mask:
             raise MediaError(f"{self.name} 协议不支持遮罩（mask）")
-        parameters: dict = {"n": n}
+        parameters: dict = {"n": n, **{str(k): v for k, v in (params or {}).items()}}
         if size:
             parameters["size"] = size
         if ref:
@@ -85,6 +85,7 @@ class DashScopeProtocol(Protocol):
         resolution: str | None,
         ratio: str | None,
         ref: str | None,
+        params: dict | None = None,
     ) -> str:
         inputs: dict = {"prompt": prompt}
         if ref:
@@ -94,7 +95,7 @@ class DashScopeProtocol(Protocol):
                     "先把首帧图上传到可访问的地址，或改用 ark / minimax 协议"
                 )
             inputs["img_url"] = ref
-        parameters: dict = {}
+        parameters: dict = {str(k): v for k, v in (params or {}).items()}
         if size:
             parameters["size"] = size
         if resolution:

@@ -35,11 +35,12 @@ class MinimaxProtocol(Protocol):
 
     def image(
         self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None,
-        mask: str | None = None,
+        mask: str | None = None, params: dict | None = None,
     ) -> list[ImageResult]:
         if mask:
             raise MediaError(f"{self.name} 协议不支持遮罩（mask）")
         body: dict = {"model": model, "prompt": prompt, "n": n, "response_format": "base64"}
+        body.update({str(k): v for k, v in (params or {}).items()})
         if size:
             if "x" in size.lower() or "*" in size:
                 width, height = _split_size(size)
@@ -79,8 +80,10 @@ class MinimaxProtocol(Protocol):
         resolution: str | None,
         ratio: str | None,
         ref: str | None,
+        params: dict | None = None,
     ) -> str:
         body: dict = {"model": model, "prompt": prompt}
+        body.update({str(k): v for k, v in (params or {}).items()})
         if seconds is not None and seconds > 0:
             body["duration"] = seconds
         if resolution:

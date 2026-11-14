@@ -15,7 +15,8 @@ independent decisions decide what happens:
 | **Where** to send the request (URL, credentials, wire protocol) | a named *profile* | `~/.config/media-gen/config.json` + OS credential store |
 | **How** to encode the request, and whether the model is image or video | the *capability registry* | `scripts/registry.json` (+ user override) |
 
-Protocols implemented: `openai` (OpenAI-compatible: LiteLLM proxies, most gateways),
+Protocols implemented: `openai` (OpenAI-compatible: LiteLLM proxies, most gateways), `azure`
+(Azure OpenAI: deployment paths, `api-key` header, `api-version` query),
 `ark` (Volcengine native: Seedance video, Seedream image), `dashscope` (Alibaba Wan),
 `minimax` (Hailuo video, image-01), plus two escape hatches for **non-official endpoints**:
 `custom` (a JSON template file describing an in-house REST shape) and `command` (a hook script that
@@ -70,7 +71,13 @@ Never conclude that a model "does not exist" because one endpoint lacks it: ask 
 | Text/image to video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [-o out.mp4]` |
 | Either, auto-detected | `media.py run --model M …` |
 | Task status / wait / fetch | `media.py status <id>` · `wait <id>` · `download <id> out.mp4` |
-| Show the request only | add `--dry-run` |
+| Show the request only | add `--dry-run` (also prints `--param` values) |
+| Machine-readable output | add `--json` |
+| Provider-specific knobs | `--param watermark=false --param seed=42` (merged into body / `extra_body`) |
+| Remix / extend an existing clip | `media.py video -p "…" --remix <id>` / `--extend <id> -s N` |
+| Gateway task list | `media.py list --model M` (per-gateway; may be unimplemented → use `tasks`) |
+| Local history | `media.py tasks [--status completed] [--limit 20] [--json]` |
+| Which capabilities are testable here? | `media.py doctor --gaps`; allowlist: `media.py models --access` |
 
 Parameter normalisation is the point of the registry: `--size` accepts `1024x1024` for every
 protocol (`1024*1024` for DashScope, `width/height` for MiniMax); `-s` maps to `seconds`

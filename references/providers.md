@@ -58,3 +58,15 @@ Two additional rules learned the hard way:
 
 The retry ladder is safe: it only advances on `400/415/422`, i.e. requests the gateway rejected before
 creating a billable task.
+
+
+## Gateway extras, measured
+
+| Route | LiteLLM → Volcengine (this mac) | Notes |
+| --- | --- | --- |
+| `GET /videos?model=<id>` | `400 LLM Provider NOT provided` | the proxy drops the query and forwards `model=''`; the CLI now says so and points at the local ledger |
+| `POST /videos/<id>/remix` | not exercised live (would create a billable task) | adapter implemented, covered by mock |
+| `POST /videos/extensions` | not exercised live | adapter implemented, covered by mock |
+
+Network note: the gateway occasionally times out on TLS handshake; GET retries (`MEDIA_RETRY`, default
+2) absorb most of it, and `doctor` is idempotent so re-running is free.

@@ -132,6 +132,19 @@ check "主账户密钥未被覆盖" "team-key-1234" "$("$PY" "$ROOT/scripts/medi
 export HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/home/.config"
 export MEDIA_API_KEY="test-key-1234567890"
 
+echo "== 新增：--json / --param / 台账 / 并发 wait / 列表 / remix"
+check "image --json 有 files 字段" '"files"' "$("$PY" "$CLI" image -p x --model gpt-image-1 -o "$TMP/j.png" --json 2>/dev/null)"
+check "video --json 有 task_id" '"task_id"' "$("$PY" "$CLI" video -p x --model doubao-seedance-2-5 -s 4 --interval 0 -o "$TMP/j.mp4" --json 2>/dev/null)"
+check "--param 出现在 dry-run 计划里" "watermark" \
+  "$("$PY" "$CLI" video -p x --model doubao-seedance-2-5 -s 4 --param watermark=false --dry-run 2>/dev/null)"
+out=$("$PY" "$CLI" wait video_1 video_1 --interval 0 --json 2>&1)
+check "并发 wait 返回数组" "[" "$out"
+check "台账记录了任务" "video_1" "$("$PY" "$CLI" tasks 2>/dev/null)"
+check "台账 --json" '"status"' "$("$PY" "$CLI" tasks --json 2>/dev/null)"
+check "list 列出远端任务" "video_1" "$("$PY" "$CLI" list --model doubao-seedance-2-5 2>/dev/null)"
+check "remix 走通" "$TMP/remix.mp4" "$("$PY" "$CLI" video -p "night" --model doubao-seedance-2-5 --remix video_1 --interval 0 -o "$TMP/remix.mp4" 2>/dev/null)"
+check "extend 走通" "$TMP/ext.mp4" "$("$PY" "$CLI" video -p "more" --model doubao-seedance-2-5 --extend video_1 -s 4 --interval 0 -o "$TMP/ext.mp4" 2>/dev/null)"
+
 echo "== 校验与报错"
 expect_exit "时长越界被本地拦下" 2 "$PY" "$CLI" video -p x --model doubao-seedance-2-5 -s 2
 expect_exit "尺寸格式错误" 2 "$PY" "$CLI" image -p x --model gpt-image-1 --size big
@@ -143,6 +156,8 @@ expect_exit "缺 prompt" 2 "$PY" "$CLI" image --model gpt-image-1
 echo "== 无密钥时报错可行动"
 out=$(env -u MEDIA_API_KEY HOME="$TMP/empty" "$PY" "$CLI" models 2>&1 || true)
 check "提示配置端点" "setup.sh" "$out"
+out=$("$PY" "$CLI" doctor --gaps 2>&1)
+check "doctor --gaps 列出可验证类别" "可验证（端点有 deployment）" "$out"
 
 echo
 if [ "$fail" = 0 ]; then echo "全部通过"; else echo "有失败项"; exit 1; fi

@@ -43,7 +43,7 @@ import urllib.request
 # MEDIA_CREDENTIAL_STORE=none 时本进程不会调用 security / secret-tool —— 测试与 CI 必须用它。
 SERVICE = "media-gen"
 LEGACY_SERVICE = "seedance-gateway"
-PROTOCOLS = ("openai", "ark", "dashscope", "minimax", "custom", "command")
+PROTOCOLS = ("openai", "azure", "ark", "dashscope", "minimax", "custom", "command")
 
 ENV_KEY = ("MEDIA_API_KEY", "SEEDANCE_API_KEY", "LEGACY_API_KEY")
 ENV_BASE = ("MEDIA_BASE_URL", "SEEDANCE_BASE_URL", "LEGACY_BASE_URL")
@@ -72,6 +72,16 @@ def store_item_name(profile: str, account: str | None) -> str:
 def pathlib_read(path: str) -> str:
     with open(os.path.expanduser(path), encoding="utf-8") as handle:
         return handle.read()
+
+
+def parse_pairs(values: list[str] | None) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for item in values or []:
+        key, separator, value = str(item).partition("=")
+        if not separator or not key.strip():
+            raise ConfigError(f"需要 K=V 形式：{item}")
+        parsed[key.strip()] = value.strip()
+    return parsed
 
 
 def validate_base_url(protocol: str, base: str) -> str:
@@ -983,6 +993,12 @@ def _manage(args) -> int:
         entry.pop("custom_file", None)
         entry.pop("command", None)
 
+    headers = parse_pairs(getattr(args, "header", None))
+    query = parse_pairs(getattr(args, "query", None))
+    if headers:
+        entry["headers"] = headers
+    if query:
+        entry["query"] = query
     if args.credential_ref:
         service, account = parse_credential_ref(args.credential_ref)
         if not _store_has(service, account):
@@ -1079,6 +1095,8 @@ def main(argv: list[str] | None = None) -> int:
     p_add.add_argument("--command-json", help='command 协议的命令表，如 {"create":"…","status":"…","fetch":"…"}')
     p_add.add_argument("--command-file", help="command 命令表的 JSON 文件")
     p_add.add_argument("--credential-ref", help="复用已有凭据库条目，格式 service:account（如 seedance-gateway:default）")
+    p_add.add_argument("--header", action="append", metavar="K=V", help="profile 级固定请求头（可重复，如 OpenAI-Organization=org_x）")
+    p_add.add_argument("--query", action="append", metavar="K=V", help="profile 级固定 query（可重复，如 api-version=2024-10-01）")
     p_add.add_argument("--account", help="新增/更新该配置档下的账户别名（同端点、独立密钥；如 team）")
     p_use = sub.add_parser("use", help="设为默认配置档")
     p_use.add_argument("name")

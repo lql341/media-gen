@@ -102,7 +102,10 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 | 视频 | `media.py video -p "<提示词>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image 首帧图] [--last-frame 尾帧.png] [-o out.mp4]` |
 | 自动判种类 | `media.py run --model M …` |
 | 换账户 | `media.py --profile <name>@<alias>` / `--account <alias>` / `MEDIA_ACCOUNT` |
-| 任务 | `media.py status <id>` · `wait` · `download` · `--create-only` |
+| 任务 | `media.py status <id>` · `wait <id…>`（并发）· `download` · `--create-only` |
+| 改/续 | `media.py video -p "…" --remix <id>` · `--extend <id> -s N` |
+| 历史 | `media.py tasks`（本地台账）· `media.py list --model M`（网关侧） |
+| 诊断 | `media.py doctor --gaps` · `media.py models --access` |
 | 不花钱 | 加 `--dry-run` |
 
 ## 目录与测试

@@ -26,6 +26,7 @@ That split is what makes it generic: the same `wan2.5-t2v` model is reached thro
 
 | Protocol | Endpoint style | Image | Video | Notes |
 | --- | --- | --- | --- | --- |
+| `azure` | `https://<res>.openai.azure.com` | deployment paths + `api-key` | — (no video route) | speech/transcribe supported |
 | `openai` | OpenAI-compatible / LiteLLM | `/images/generations` | `/videos` + poll | the safest choice for gateways |
 | `ark` | `https://ark.cn-beijing.volces.com/api/v3` | `/images/generations` | `/contents/generations/tasks` | Seedance video, Seedream image |
 | `dashscope` | `https://dashscope.aliyuncs.com/api/v1` | async task API | async task API | Wan t2i/t2v/i2v, `1024*1024` sizes |
@@ -104,7 +105,10 @@ suite runs with `none` and asserts zero keyring operations.
 | transcribe | `media.py transcribe -f audio.mp3 --model whisper-1 [--language zh] [-o out.txt]` |
 | video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [--last-frame f.png] [-o out.mp4]` |
 | either | `media.py run --model M …` (kind from the registry) |
-| tasks | `media.py status <id>` · `wait <id>` · `download <id> out.mp4` · `--create-only` |
+| tasks | `media.py status <id>` · `wait <id…>` (parallel) · `download <id> out.mp4` · `--create-only` |
+| remix / extend | `media.py video -p "…" --remix <id>` · `--extend <id> -s N` |
+| history | `media.py tasks` (local ledger) · `media.py list --model M` (gateway) |
+| diagnostics | `media.py doctor --gaps` · `media.py models --access` |
 | no spend | add `--dry-run` |
 
 ## Layout

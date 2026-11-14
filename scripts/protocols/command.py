@@ -99,7 +99,8 @@ class CommandProtocol(Protocol):
     # ---------------------------------------------------------------- actions
 
     def image(
-        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None, mask: str | None = None
+        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None,
+        mask: str | None = None, params: dict | None = None,
     ) -> list[ImageResult]:
         payload = {"model": model, "prompt": prompt, "n": n}
         if size:
@@ -108,6 +109,8 @@ class CommandProtocol(Protocol):
             payload["ref"] = ref
         if mask:
             payload["mask"] = mask
+        if params:
+            payload["params"] = params
         result = self._json("image", payload)
         # 单张：{b64} / {url}；多张：{images:[{b64|url}, …]}
         entries = result.get("images")
@@ -130,13 +133,15 @@ class CommandProtocol(Protocol):
             raise MediaError("command.image 需要返回 {b64}/{url}，或 {images:[{b64|url}, …]}")
         return images
 
-    def video_create(self, model, prompt, *, seconds, size, resolution, ratio, ref):
+    def video_create(self, model, prompt, *, seconds, size, resolution, ratio, ref, params=None):
         payload = {"model": model, "prompt": prompt}
         for key, value in (
             ("seconds", seconds), ("size", size), ("ratio", ratio), ("resolution", resolution), ("ref", ref),
         ):
             if value is not None:
                 payload[key] = value
+        if params:
+            payload["params"] = params
         result = self._json("create", payload)
         task_id = result.get("task_id") or result.get("id")
         if not task_id:

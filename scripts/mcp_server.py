@@ -45,6 +45,8 @@ def _args(**kwargs):
         "timeout_seconds": 120,
         "verbose": False,
         "dry_run": False,
+        "param": [],
+        "json": False,
     }
     base.update(kwargs)
     return SimpleNamespace(**base)
@@ -102,6 +104,8 @@ TOOLS = [
                 "out": {"type": "string", "description": "output file path"},
                 "profile": {"type": "string"},
                 "dry_run": {"type": "boolean", "description": "show the request only, spend nothing"},
+                "param": {"type": "array", "items": {"type": "string"},
+                          "description": "provider-specific parameters as key=value, e.g. watermark=false"},
             },
             "required": ["prompt"],
         },
@@ -123,6 +127,8 @@ TOOLS = [
                 "profile": {"type": "string"},
                 "create_only": {"type": "boolean", "description": "return the task id instead of waiting"},
                 "dry_run": {"type": "boolean"},
+                "param": {"type": "array", "items": {"type": "string"},
+                          "description": "provider-specific parameters as key=value"},
             },
             "required": ["prompt"],
         },
@@ -187,6 +193,7 @@ def call_tool(name: str, arguments: dict) -> dict:
             image=arguments.get("image"),
             out=arguments.get("out"),
             dry_run=bool(arguments.get("dry_run")),
+            param=list(arguments.get("param") or []),
             profile=arguments.get("profile") or None,
         )
         return _image(args)
@@ -205,6 +212,7 @@ def call_tool(name: str, arguments: dict) -> dict:
             dry_run=bool(arguments.get("dry_run")),
             interval=int(arguments.get("interval") or cli.DEFAULT_INTERVAL),
             timeout=int(arguments.get("timeout") or cli.DEFAULT_TIMEOUT),
+            param=list(arguments.get("param") or []),
             profile=arguments.get("profile") or None,
         )
         return _capture(cli.cmd_video, args)

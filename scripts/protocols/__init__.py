@@ -35,6 +35,8 @@ class Endpoint:
     base_url: str
     key: str
     timeout: int = 120
+    headers: dict | None = None      # profile 级固定请求头（如 OpenAI-Organization）
+    query: dict | None = None        # profile 级固定 query（如 Azure 的 api-version）
 
 
 @dataclass
@@ -129,6 +131,11 @@ class Protocol:
         headers: dict | None = None,
         auth: bool = True,
     ) -> tuple[int, dict, bytes]:
+        if self.endpoint.query:
+            import urllib.parse as _parse
+
+            separator = "&" if "?" in url else "?"
+            url = url + separator + _parse.urlencode(self.endpoint.query)
         data = None
         request_headers = {"Accept": "application/json"}
         if isinstance(body, dict):
@@ -138,21 +145,40 @@ class Protocol:
             data = body
         if auth and self.endpoint.key:
             request_headers["Authorization"] = f"Bearer {self.endpoint.key}"
+        if self.endpoint.headers:
+            request_headers.update({str(k): str(v) for k, v in self.endpoint.headers.items()})
         if headers:
             request_headers.update(headers)
-        request = urllib.request.Request(url, data=data, headers=request_headers, method=method)
-        try:
-            with urllib.request.urlopen(request, timeout=self.endpoint.timeout) as response:
-                raw = response.read()
-                status = response.status
-                content_type = response.headers.get("Content-Type", "")
-        except urllib.error.HTTPError as error:
-            raw = error.read()
-            status = error.code
-            content_type = error.headers.get("Content-Type", "") if error.headers else ""
-        except (urllib.error.URLError, OSError) as error:
-            reason = getattr(error, "reason", error)
-            raise MediaError(f"连不上 {url}：{reason}") from None
+        attempts = 1 + (retry_count() if method == "GET" else 0)
+        last: tuple[int, dict, bytes] | None = None
+        for attempt in range(attempts):
+            request = urllib.request.Request(url, data=data, headers=request_headers, method=method)
+            try:
+                with urllib.request.urlopen(request, timeout=self.endpoint.timeout) as response:
+                    raw = response.read()
+                    status = response.status
+                    content_type = response.headers.get("Content-Type", "")
+            except urllib.error.HTTPError as error:
+                raw = error.read()
+                status = error.code
+                content_type = error.headers.get("Content-Type", "") if error.headers else ""
+            except (urllib.error.URLError, OSError) as error:
+                if attempt + 1 < attempts:
+                    import time as _time
+
+                    _time.sleep(0.5 * (2 ** attempt))
+                    continue
+                reason = getattr(error, "reason", error)
+                raise MediaError(f"连不上 {url}：{reason}") from None
+            last = (status, {}, raw)
+            if status in (429, 500, 502, 503, 504) and attempt + 1 < attempts:
+                import time as _time
+
+                _time.sleep(0.5 * (2 ** attempt))
+                continue
+            break
+        status, _, raw = last if last else (0, {}, b"")
+        content_type = locals().get("content_type", "") or ""
         if "json" in content_type:
             try:
                 return status, json.loads(raw or b"{}"), raw
@@ -180,7 +206,8 @@ class Protocol:
         return None
 
     def image(
-        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None, mask: str | None = None
+        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None,
+        mask: str | None = None, params: dict | None = None,
     ) -> list[ImageResult]:
         raise MediaError(f"{self.name} 协议不支持图片生成")
 
@@ -200,6 +227,7 @@ class Protocol:
         resolution: str | None,
         ratio: str | None,
         ref: str | None,
+        params: dict | None = None,
     ) -> str:
         raise MediaError(f"{self.name} 协议不支持视频生成")
 
@@ -208,6 +236,15 @@ class Protocol:
 
     def video_fetch(self, task_id: str, state: VideoState) -> bytes:
         raise MediaError(f"{self.name} 协议不支持视频下载")
+
+
+def retry_count() -> int:
+    """GET 重试次数（轮询/下载抗抖动）；默认 2，可用 MEDIA_RETRY 调整。"""
+    raw = os.environ.get("MEDIA_RETRY", "2").strip()
+    try:
+        return max(0, min(5, int(raw)))
+    except ValueError:
+        return 2
 
 
 def error_message(payload: dict, raw: bytes = b"") -> str:
@@ -243,10 +280,11 @@ def guess_suffix(url: str | None, content_type: str = "", default: str = ".png")
 
 
 def load_protocol(name: str):
-    from . import ark, command, custom, dashscope, minimax, openai
+    from . import ark, azure, command, custom, dashscope, minimax, openai
 
     table = {
         "openai": openai.OpenAIProtocol,
+        "azure": azure.AzureProtocol,
         "ark": ark.ArkProtocol,
         "dashscope": dashscope.DashScopeProtocol,
         "minimax": minimax.MinimaxProtocol,

@@ -108,12 +108,14 @@ class CustomProtocol(Protocol):
     # ------------------------------------------------------------------ image
 
     def image(
-        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None, mask: str | None = None
+        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None,
+        mask: str | None = None, params: dict | None = None,
     ) -> list[ImageResult]:
         config = self.spec.get("image")
         if not isinstance(config, dict):
             raise MediaError("该 custom 配置没有 image 段")
-        values = self._values(model=model, prompt=prompt, size=size, n=n, ref=ref, mask=mask)
+        values = self._values(model=model, prompt=prompt, size=size, n=n, ref=ref, mask=mask,
+                              **{str(k): v for k, v in (params or {}).items()})
         method = str(config.get("method", "POST")).upper()
         url = self._path(config.get("path", "/"), values)
         body = self._render(config.get("body"), values)
@@ -184,13 +186,14 @@ class CustomProtocol(Protocol):
 
     # ------------------------------------------------------------------ video
 
-    def video_create(self, model, prompt, *, seconds, size, resolution, ratio, ref):
+    def video_create(self, model, prompt, *, seconds, size, resolution, ratio, ref, params=None):
         create = self.spec.get("video", {}).get("create")
         if not isinstance(create, dict):
             raise MediaError("该 custom 配置没有 video.create 段")
         values = self._values(
             model=model, prompt=prompt, size=size, n=None, seconds=seconds,
             ratio=ratio, resolution=resolution, ref=ref,
+            **{str(k): v for k, v in (params or {}).items()},
         )
         method = str(create.get("method", "POST")).upper()
         url = self._path(create.get("path", "/"), values)

@@ -42,6 +42,16 @@ No image (other than `gemini-embedding-2`), speech or transcription deployment i
 key's team allowlist confirms it: requesting `gpt-image-1`, `wan*`, `MiniMax-Hailuo*`, `tts-1`,
 `whisper-1` returns the allowlist, which contains only chat models plus the two Seedance ids.
 
+## Live: diagnostics added in 0.10.0
+
+| # | Check | Command | Observed |
+| --- | --- | --- | --- |
+| 14 | capability gaps | `media.py doctor --gaps` | lists `video` as verifiable and `image` / `speech` / `transcription` as not (no deployment) |
+| 15 | key allowlist | `media.py models --access` | 53 models read from the 401 body with a single bogus POST; no task created |
+| 16 | gateway task list | `media.py list --model doubao-seedance-2-5` | gateway answers `400 LLM Provider NOT provided` (its list route drops `model`); CLI explains and points at `tasks` |
+| 17 | param planning | `media.py video … --param watermark=false --param seed=42 --dry-run` | plan shows `params: {watermark: false, seed: 42}` |
+| 18 | GET retry | one `doctor` run during a TLS handshake timeout | retried, then succeeded on the next invocation |
+
 ## Simulated (code path exercised, no vendor involved)
 
 | Capability | How it is covered |

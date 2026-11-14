@@ -54,13 +54,16 @@ class OpenAIProtocol(Protocol):
     # ------------------------------------------------------------- images
 
     def image(
-        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None, mask: str | None = None
+        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None,
+        mask: str | None = None, params: dict | None = None,
     ) -> list[ImageResult]:
         if ref:
             # 参考图 / 遮罩：/images/edits（multipart）
             fields = {"model": model, "prompt": prompt, "n": n, "response_format": "b64_json"}
             if size:
                 fields["size"] = size
+            for key, value in (params or {}).items():
+                fields[str(key)] = value
             files = {"image": file_part(ref)}
             if mask:
                 files["mask"] = file_part(mask)
@@ -75,6 +78,8 @@ class OpenAIProtocol(Protocol):
         body: dict = {"model": model, "prompt": prompt, "n": n, "response_format": "b64_json"}
         if size:
             body["size"] = size
+        if params:
+            body.update({str(k): v for k, v in params.items()})
         status, payload, raw = self._request(
             "POST", self.endpoint.base_url + "/images/generations", body
         )
@@ -124,13 +129,14 @@ class OpenAIProtocol(Protocol):
         resolution: str | None,
         ratio: str | None,
         ref: str | None,
+        params: dict | None = None,
     ) -> str:
         body: dict = {"model": model, "prompt": prompt}
         if seconds is not None:
             body["seconds"] = seconds
         if size:
             body["size"] = size
-        extra: dict = {}
+        extra: dict = dict(params or {})
         if ratio:
             extra["ratio"] = ratio
         if resolution:
@@ -201,6 +207,38 @@ class OpenAIProtocol(Protocol):
         if not task_id:
             raise MediaError(f"POST /videos 没有返回任务 id：{json.dumps(payload)[:300]}")
         return str(task_id)
+
+    def video_list(self, model: str, limit: int = 20) -> list[dict]:
+        payload = self._json("GET", f"/videos?model={model}")
+        items = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(items, list):
+            items = payload.get("videos") if isinstance(payload, dict) else None
+        return [item for item in (items or []) if isinstance(item, dict)][:limit]
+
+    def video_remix(self, task_id: str, prompt: str) -> str:
+        status, payload, raw = self._request(
+            "POST", self.endpoint.base_url + f"/videos/{task_id}/remix", {"prompt": prompt}
+        )
+        if status >= 400:
+            raise MediaError(f"POST /videos/{task_id}/remix → {status}：{error_message(payload, raw)}")
+        new_id = payload.get("id") or payload.get("task_id") or payload.get("video_id")
+        if not new_id:
+            raise MediaError(f"remix 没有返回新任务 id：{json.dumps(payload)[:300]}")
+        return str(new_id)
+
+    def video_extend(self, task_id: str, prompt: str, seconds: int | None) -> str:
+        body: dict = {"video_id": task_id, "prompt": prompt}
+        if seconds is not None:
+            body["seconds"] = seconds
+        status, payload, raw = self._request(
+            "POST", self.endpoint.base_url + "/videos/extensions", body
+        )
+        if status >= 400:
+            raise MediaError(f"POST /videos/extensions → {status}：{error_message(payload, raw)}")
+        new_id = payload.get("id") or payload.get("task_id") or payload.get("video_id")
+        if not new_id:
+            raise MediaError(f"extensions 没有返回新任务 id：{json.dumps(payload)[:300]}")
+        return str(new_id)
 
     def video_status(self, task_id: str) -> VideoState:
         payload = self._json("GET", f"/videos/{task_id}")

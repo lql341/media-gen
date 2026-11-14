@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.10.0 - 2026-11-14
+
+The whole A–C backlog: diagnostics, remix/extend, plumbing, Azure, retries, ledger.
+
+- **Diagnostics**: `doctor --gaps` reports which capability kinds this endpoint can actually verify;
+  `models --access` reads the key's allowlist out of a single rejected bogus POST (creates nothing).
+- **Gateway extras**: `video --remix <id>` / `--extend <id> -s N`, `list --model M`; when a gateway's
+  list route drops `model` (as LiteLLM does here) the CLI says so and points at `tasks`.
+- **Local ledger**: `~/.local/state/media-gen/tasks.jsonl` (0600) records every create/wait/download;
+  `media.py tasks [--status] [--limit] [--json]`.
+- **Parallel wait**: `wait id1 id2 …` polls with a thread pool (max 8).
+- **`--json`** on image / video / wait / list / tasks for agents and CI.
+- **`--param k=v`** (repeatable) forwards provider-specific knobs into the body or `extra_body`, with
+  bool/int coercion and inclusion in `--dry-run`.
+- **Profile `--header` / `--query`**: fixed headers (e.g. `OpenAI-Organization`) and query params
+  (e.g. Azure `api-version`).
+- **Azure OpenAI protocol**: deployment-scoped paths, `api-key` header, `/audio/*` and `/images/*`;
+  video is refused with an explicit message instead of hitting a wrong URL.
+- **GET retries**: polling/download retry on 429/5xx and network errors (`MEDIA_RETRY`, default 2,
+  capped at 5, backoff 0.5 s → 1 s). Paid POSTs are never retried.
+- **Registry** grown to 24 rules: Kling, Luma, Runway, Pika, Sora, Veo, Imagen/Gemini-image, FLUX,
+  Stability, Recraft/Ideogram/Kolors/CogView/Hunyuan-image, MiniMax T2A, CosyVoice/Sambert,
+  Paraformer/SenseVoice, OpenAI transcription.
+- Tests: 39 protocol tests (extras: list, remix/extend, params, headers/query, Azure, no-retry-on-POST)
+  and CLI coverage for `--json`, `--param`, ledger, parallel wait, list, remix/extend, `doctor --gaps`.
+
 ## 0.9.2 - 2026-11-14
 
 macOS verification sweep, plus two small correctness fixes.

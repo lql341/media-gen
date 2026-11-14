@@ -20,7 +20,7 @@ class ArkProtocol(Protocol):
 
     def image(
         self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None,
-        mask: str | None = None,
+        mask: str | None = None, params: dict | None = None,
     ) -> list[ImageResult]:
         if mask:
             raise MediaError(f"{self.name} 协议不支持遮罩（mask）")
@@ -32,6 +32,8 @@ class ArkProtocol(Protocol):
             body["n"] = n
         if ref:
             body["image"] = data_uri(ref)
+        if params:
+            body.update({str(k): v for k, v in params.items()})
         status, payload, raw = self._request("POST", self.endpoint.base_url + "/images/generations", body)
         if status >= 400:
             raise MediaError(f"POST /images/generations → {status}：{error_message(payload, raw)}")
@@ -47,6 +49,7 @@ class ArkProtocol(Protocol):
         resolution: str | None,
         ratio: str | None,
         ref: str | None,
+        params: dict | None = None,
     ) -> str:
         content: list[dict] = [{"type": "text", "text": prompt}]
         if ref:
@@ -58,6 +61,8 @@ class ArkProtocol(Protocol):
             body["ratio"] = ratio
         if resolution:
             body["resolution"] = resolution
+        if params:
+            body.update({str(k): v for k, v in params.items()})
         if size and not (ratio or resolution):
             # Ark speaks ratio+resolution; a WxH size can still be passed through
             # and is rejected with an actionable message if unsupported.

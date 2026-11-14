@@ -33,6 +33,9 @@ class State:
         self.fail_video = False
         self.video_mode = "eventual"  # eventual | fail
         self.content_types: list[str] = []
+        self.headers: list[dict] = []
+        self.queries: list[str] = []
+        self.paths: list[str] = []
 
     def record(self, method: str, path: str, body: dict) -> None:
         self.calls.append((method, path, body))
@@ -61,6 +64,7 @@ def make_handler(state: State):
             raw = self.rfile.read(length) if length else b""
             self.raw_body = raw
             self.content_type = self.headers.get("Content-Type", "")
+
             state.content_types.append(self.content_type)
             try:
                 return json.loads(raw or b"{}")
@@ -75,6 +79,10 @@ def make_handler(state: State):
         def do_GET(self) -> None:  # noqa: N802
             path = self.path.split("?", 1)[0]
             state.record("GET", path, {})
+
+            state.headers.append({k.lower(): v for k, v in self.headers.items()})
+            state.paths.append(path)
+            state.queries.append(self.path.split("?", 1)[1] if "?" in self.path else "")
             if path in ("/v1/models", "/models"):
                 return self._json(
                     200,
@@ -92,6 +100,11 @@ def make_handler(state: State):
                 )
             if path.startswith("/v1/videos/") and path.endswith("/content"):
                 return self._send(200, MP4, "video/mp4")
+            if path == "/v1/videos":
+                return self._json(200, {"data": [
+                    {"id": "video_1", "status": "completed", "seconds": "5", "size": "1280x720"},
+                    {"id": "video_2", "status": "processing", "seconds": "5", "size": "1280x720"},
+                ]})
             if path.startswith("/v1/videos/"):
                 state.video_polls += 1
                 if state.video_mode == "fail":
@@ -174,6 +187,9 @@ def make_handler(state: State):
         # ------------------------------------------------------------ POST
         def do_POST(self) -> None:  # noqa: N802
             path = self.path.split("?", 1)[0]
+            state.headers.append({k.lower(): v for k, v in self.headers.items()})
+            state.paths.append(path)
+            state.queries.append(self.path.split("?", 1)[1] if "?" in self.path else "")
             body = self._body()
             state.record("POST", path, body)
 
@@ -187,6 +203,10 @@ def make_handler(state: State):
                         {"url": self._base() + "/files/openai.png"},
                         {"b64_json": B64_PNG},
                     ]})
+                return self._json(200, {"data": [{"b64_json": B64_PNG}]})
+            if "/openai/deployments/" in path and path.endswith("/images/edits"):
+                if "multipart/form-data" not in self.headers.get("Content-Type", ""):
+                    return self._json(400, {"error": {"message": "expected multipart"}})
                 return self._json(200, {"data": [{"b64_json": B64_PNG}]})
             if path in ("/v1/images/edits", "/images/edits"):
                 ctype = self.headers.get("Content-Type", "")
@@ -229,6 +249,12 @@ def make_handler(state: State):
                 ]}})
             if path == "/custom/tasks":
                 return self._json(200, {"task": {"id": "c1"}})
+            if path.endswith("/remix"):
+                return self._json(200, {"id": "video_remix_1", "status": "queued"})
+            if path == "/v1/videos/extensions":
+                return self._json(200, {"id": "video_ext_1", "status": "queued"})
+            if "/openai/deployments/" in path and path.endswith("/images/generations"):
+                return self._json(200, {"data": [{"b64_json": B64_PNG}]})
             if path == "/v1/image_generation":
                 return self._json(200, {"data": {"image_base64": [B64_PNG]}, "base_resp": {"status_code": 0}})
             return self._json(404, {"error": {"message": f"no route {path}"}})
