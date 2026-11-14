@@ -19,6 +19,9 @@ echo
 echo "=== MCP server（图形客户端通道）"
 "$PY" "$HERE/test_mcp.py"
 echo
+echo "=== 平台分支（Linux secret-tool / Linux 无钥匙环 / Windows）"
+"$PY" "$HERE/test_platform.py"
+echo
 echo "=== 配置与凭据"
 bash "$HERE/test-config.sh"
 echo

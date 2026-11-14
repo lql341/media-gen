@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.1 - 2026-11-14
+
+Platform-branch tests, and a real bug they caught.
+
+- `tests/test_platform.py`: exercises the **Linux** `secret-tool` path against a shim binary on PATH
+  (store/lookup/clear round-trip, per-account items, delete gate), the **Linux-without-keyring**
+  degradation (0600 file / env still work, `store_key` explains the alternatives), and the **Windows**
+  branch (no backend → clear error). Also asserts `MEDIA_CREDENTIAL_STORE=none` never invokes the store.
+- Fixed `store_key()` crashing with `NameError: item` for the credential-store path (accounts refactor
+  dropped the local variable; the file-store tests never reached it).
+- Note: these are simulated branches on macOS — a native Linux run is still required for the keyring
+  proof; see the answer in the project thread.
+
 ## 0.9.0 - 2026-11-14
 
 Image-to-video that actually works against a real LiteLLM gateway, plus honest notes about it.

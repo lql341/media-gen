@@ -391,6 +391,7 @@ def store_key(profile: str, key: str, account: str | None = None) -> str:
             "MEDIA_CREDENTIAL_STORE=none：本进程不会写系统凭据库；"
             "改用环境变量 MEDIA_API_KEY 或 --store file"
         )
+    item = store_item_name(profile, account)
     provider = secure_store_name()
     payload = json.dumps({"api_key": key}, separators=(",", ":"))
     if provider == "macOS Keychain":
