@@ -56,6 +56,11 @@
       "notes": "OpenAI 兼容文生图"
     },
     {
+      "match": ["gpt-4o-mini-tts*", "tts-1*", "speech-*", "cosyvoice*"],
+      "kind": "audio",
+      "notes": "OpenAI 兼容语音合成（POST /audio/speech，返回音频字节）"
+    },
+    {
       "match": ["sora*", "veo*", "kling*", "pixverse*", "hunyuan-video*", "cogvideo*"],
       "kind": "video",
       "duration": { "min": 1, "max": 20 },

@@ -98,12 +98,16 @@ class CommandProtocol(Protocol):
 
     # ---------------------------------------------------------------- actions
 
-    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> list[ImageResult]:
+    def image(
+        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None, mask: str | None = None
+    ) -> list[ImageResult]:
         payload = {"model": model, "prompt": prompt, "n": n}
         if size:
             payload["size"] = size
         if ref:
             payload["ref"] = ref
+        if mask:
+            payload["mask"] = mask
         result = self._json("image", payload)
         # 单张：{b64} / {url}；多张：{images:[{b64|url}, …]}
         entries = result.get("images")

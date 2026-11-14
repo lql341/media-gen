@@ -18,7 +18,12 @@ from . import ImageResult, MediaError, Protocol, VideoState, data_uri, error_mes
 class ArkProtocol(Protocol):
     name = "ark"
 
-    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> list[ImageResult]:
+    def image(
+        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None,
+        mask: str | None = None,
+    ) -> list[ImageResult]:
+        if mask:
+            raise MediaError(f"{self.name} 协议不支持遮罩（mask）")
         body: dict = {"model": model, "prompt": prompt, "response_format": "b64_json"}
         if size:
             body["size"] = size
@@ -81,6 +86,7 @@ class ArkProtocol(Protocol):
             seconds=_as_text(payload.get("duration")) or _as_text(payload.get("seconds")),
             size=_as_text(payload.get("resolution")),
             usage=payload.get("usage") or {},
+            last_frame_url=content.get("last_frame_url"),
             extra={k: v for k, v in payload.items() if k not in ("content", "usage")},
         )
 

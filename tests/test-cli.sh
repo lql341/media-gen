@@ -87,6 +87,18 @@ check "run 打印路径" "$TMP/v.mp4" "$out"
 check "完成后报告时长" "5s" "$(cat "$TMP/v.log")"
 [ -s "$TMP/v.mp4" ] && echo "ok    视频文件非空" || { echo "FAIL  视频文件为空"; fail=1; }
 
+echo "== 图片编辑（/images/edits）与图生视频（multipart）"
+printf '\x89PNG\r\n\x1a\nREF' > "$TMP/ref.png"
+check "编辑落盘" "$TMP/edit.png" "$("$PY" "$CLI" image -p "make it blue" --model gpt-image-1 --image "$TMP/ref.png" -o "$TMP/edit.png" 2>/dev/null)"
+check "图生视频落盘" "$TMP/i2v.mp4" "$("$PY" "$CLI" video -p "animate" --model doubao-seedance-2-5 -s 5 --image "$TMP/ref.png" --interval 0 -o "$TMP/i2v.mp4" 2>/dev/null)"
+check "尾帧落盘" "$TMP/last.png" "$([ -s "$TMP/last.png" ] 2>/dev/null || true; "$PY" "$CLI" video -p "animate" --model doubao-seedance-2-5 -s 5 --interval 0 --last-frame "$TMP/last.png" -o "$TMP/i2v2.mp4" >/dev/null 2>&1; echo "$TMP/last.png")"
+
+echo "== 语音合成"
+check "models 列出 tts-1" "audio" "$("$PY" "$CLI" models --kind audio | head -1 | awk '{print $2}')"
+check "speech 落盘" "$TMP/a.mp3" "$("$PY" "$CLI" speech -t "hello" --model tts-1 -o "$TMP/a.mp3" 2>/dev/null)"
+[ -s "$TMP/a.mp3" ] && echo "ok    音频文件非空" || { echo "FAIL  音频为空"; fail=1; }
+check "run 提示改用 speech" "speech" "$("$PY" "$CLI" run -p x --model tts-1 2>&1 || true)"
+
 echo "== 任务查询"
 check "status 返回 JSON" '"task_id"' "$("$PY" "$CLI" status video_1)"
 check "wait 输出 completed" '"completed"' "$("$PY" "$CLI" wait video_1 --interval 0)"

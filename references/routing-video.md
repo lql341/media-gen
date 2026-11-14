@@ -13,8 +13,23 @@ GET  /videos/<id>       → {"status": "queued|processing|completed|failed", "re
 GET  /videos/<id>/content   → binary (may answer 307 to object storage: follow redirects)
 ```
 
-`seconds` accepts `-1` on some deployments, meaning "let the model choose". Reference images need
-multipart `input_reference`, which this CLI does not fake: use a native protocol for image-to-video.
+`seconds` accepts `-1` on some deployments, meaning "let the model choose".
+
+**Image-to-video** goes through the same route as multipart:
+
+```
+POST /videos   (multipart/form-data)
+model=…  prompt=…  seconds=5  [size=1280x720]  [extra_body={"ratio":"16:9","resolution":"720p"}]
+input_reference=@first-frame.png
+```
+
+That is the documented shape in both OpenAI's Videos API and LiteLLM's `/videos`
+(`input_reference` is a binary field). The CLI switches to multipart automatically when `--image` is
+given, so the same command works for text-to-video and image-to-video.
+
+**Last frame**: completed tasks may carry `result.last_frame_url`. Pass `--last-frame out.png` to
+`media.py video` (or `download`) and the adapter fetches and saves it — useful for chaining clips
+where the end of one is the start of the next. `status` prints `last_frame_url` too.
 
 Only video deployments answer here. A chat endpoint returns
 `429 No deployments available for selected model` — that is not a rate limit and must not be retried.

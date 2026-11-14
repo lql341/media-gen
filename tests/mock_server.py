@@ -32,6 +32,7 @@ class State:
         self.calls: list[tuple[str, str, dict]] = []
         self.fail_video = False
         self.video_mode = "eventual"  # eventual | fail
+        self.content_types: list[str] = []
 
     def record(self, method: str, path: str, body: dict) -> None:
         self.calls.append((method, path, body))
@@ -58,6 +59,9 @@ def make_handler(state: State):
         def _body(self) -> dict:
             length = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(length) if length else b""
+            self.raw_body = raw
+            self.content_type = self.headers.get("Content-Type", "")
+            state.content_types.append(self.content_type)
             try:
                 return json.loads(raw or b"{}")
             except ValueError:
@@ -80,6 +84,7 @@ def make_handler(state: State):
                             {"id": "doubao-seedance-2-5", "object": "model"},
                             {"id": "wan2.5-t2i-preview", "object": "model"},
                             {"id": "gpt-image-1", "object": "model"},
+                            {"id": "tts-1", "object": "model"},
                             {"id": "text-only-model", "object": "model"},
                         ],
                     },
@@ -100,7 +105,10 @@ def make_handler(state: State):
                         "seconds": "5",
                         "size": "1280x720",
                         "usage": {"completion_tokens": 1},
-                        "result": {"url": self._base() + "/v1/videos/video_1/content"},
+                        "result": {
+                            "url": self._base() + "/v1/videos/video_1/content",
+                            "last_frame_url": self._base() + "/files/last.png",
+                        },
                     },
                 )
             if path.startswith("/api/v3/contents/generations/tasks/"):
@@ -179,6 +187,15 @@ def make_handler(state: State):
                         {"b64_json": B64_PNG},
                     ]})
                 return self._json(200, {"data": [{"b64_json": B64_PNG}]})
+            if path in ("/v1/images/edits", "/images/edits"):
+                ctype = self.headers.get("Content-Type", "")
+                if "multipart/form-data" not in ctype:
+                    return self._json(400, {"error": {"message": "expected multipart"}})
+                return self._json(200, {"data": [{"b64_json": B64_PNG}]})
+            if path in ("/v1/audio/speech", "/audio/speech"):
+                if body.get("input") is None:
+                    return self._json(400, {"error": {"message": "input required"}})
+                return self._send(200, b"ID3FAKEAUDIO", "audio/mpeg")
             if path in ("/v1/videos", "/videos"):
                 return self._json(200, {"id": "video_1", "object": "video", "status": "queued"})
             if path == "/api/v3/contents/generations/tasks":

@@ -218,6 +218,7 @@ def cmd_image(args) -> int:
                     "size": size,
                     "n": args.n,
                     "reference": args.image,
+                    "mask": getattr(args, "mask", None),
                     "capability": capability_line(model),
                 },
                 ensure_ascii=False,
@@ -232,7 +233,10 @@ def cmd_image(args) -> int:
     ref = os.path.expanduser(args.image) if args.image else None
     if ref and not os.path.isfile(ref):
         die(f"找不到参考图：{ref}")
-    results = protocol.image(model, args.prompt, size=size, n=args.n, ref=ref)
+    mask = os.path.expanduser(args.mask) if getattr(args, "mask", None) else None
+    if mask and not os.path.isfile(mask):
+        die(f"找不到遮罩图：{mask}")
+    results = protocol.image(model, args.prompt, size=size, n=args.n, ref=ref, mask=mask)
     if not results:
         die("服务端没有返回任何图片")
     base_out = args.out or default_output("image")
@@ -301,6 +305,12 @@ def cmd_video(args) -> int:
     payload = protocol.video_fetch(task_id, state)
     out = args.out or default_output("video")
     write_artifact(out, payload)
+    if getattr(args, "last_frame", None) and state.last_frame_url:
+        last = protocol.fetch(state.last_frame_url)
+        write_artifact(os.path.expanduser(args.last_frame), last)
+        announce(f"尾帧已保存 {args.last_frame}（{len(last)} 字节）")
+    elif getattr(args, "last_frame", None):
+        announce("该任务没有返回 last_frame_url，未保存尾帧")
     announce(
         "完成："
         + " · ".join(
@@ -346,6 +356,7 @@ def cmd_status(args) -> int:
         "seconds": state.seconds,
         "size": state.size,
         "url": state.url,
+        "last_frame_url": state.last_frame_url,
         "error": state.error,
         "usage": state.usage,
         "raw": state.extra,
@@ -365,6 +376,7 @@ def cmd_wait(args) -> int:
                 "seconds": state.seconds,
                 "size": state.size,
                 "url": state.url,
+                "last_frame_url": state.last_frame_url,
                 "usage": state.usage,
                 "raw": state.extra,
             },
@@ -398,7 +410,33 @@ def cmd_run(args) -> int:
         return cmd_image(args)
     if kind == "video":
         return cmd_video(args)
+    if kind == "audio":
+        die(f"{model} 是语音模型；用 speech 子命令：media.py speech -t \"文本\" --model {model}")
     die(f"无法判断 {model} 是图片还是视频模型；用 image 或 video 子命令显式指定")
+
+
+def cmd_speech(args) -> int:
+    name, profile, protocol = make_context(args)
+    model = (
+        args.model
+        or os.environ.get("MEDIA_AUDIO_MODEL", "")
+        or ((profile.get("default_models") or {}).get("audio") if isinstance(
+            profile.get("default_models"), dict) else None)
+    )
+    if not model:
+        die("speech 需要 --model（或用 setup.sh add … --default-audio 保存默认值）", 2)
+    if args.dry_run:
+        print(json.dumps({
+            "profile": name, "protocol": profile["protocol"], "kind": "audio",
+            "model": model, "input": args.text, "voice": args.voice, "format": args.format,
+        }, ensure_ascii=False, indent=2))
+        return 0
+    payload, suffix = protocol.speech(model, args.text, voice=args.voice, fmt=args.format)
+    out = args.out or f"media-{time.strftime('%Y%m%d-%H%M%S')}{suffix}"
+    write_artifact(out, payload)
+    announce(f"模型 {model} · {len(payload)} 字节")
+    print(out)
+    return 0
 
 
 def cmd_doctor(args) -> int:
@@ -471,7 +509,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_models = sub.add_parser("models", help="列出端点/能力表里的媒体模型")
-    p_models.add_argument("--kind", choices=("image", "video"))
+    p_models.add_argument("--kind", choices=("image", "video", "audio"))
     p_models.add_argument("--json", action="store_true")
     p_models.set_defaults(func=cmd_models)
 
@@ -485,6 +523,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="视频等待上限（秒）")
         if kind == "image":
             p.add_argument("--size", help="像素尺寸，如 1024x1024（会自动转成模型要求的分隔符）")
+            p.add_argument("--mask", help="遮罩图（仅 /images/edits 支持）")
             p.add_argument("-n", type=int, default=1)
         else:
             p.add_argument("--size", help="像素尺寸，如 1280x720")
@@ -492,6 +531,7 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--ratio", help="宽高比，如 16:9（部分协议用）")
             p.add_argument("--resolution", help="分辨率档位，如 720p / 1080P")
             p.add_argument("--create-only", action="store_true", help="只建任务并打印任务 id")
+            p.add_argument("--last-frame", help="把完成任务的尾帧图片保存到该路径")
 
     p_image = sub.add_parser("image", help="文生图（同步返回）")
     add_generation_flags(p_image, "image")
@@ -520,6 +560,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_download.add_argument("task_id")
     p_download.add_argument("out", nargs="?")
     p_download.set_defaults(func=cmd_download)
+
+    p_speech = sub.add_parser("speech", help="语音合成（/audio/speech，返回音频文件）")
+    p_speech.add_argument("-t", "--text", required=True, help="要合成的文本")
+    p_speech.add_argument("--model")
+    p_speech.add_argument("--voice")
+    p_speech.add_argument("--format", help="mp3 / wav / opus …（默认由服务端决定）")
+    p_speech.add_argument("-o", "--out", help="输出文件路径")
+    p_speech.add_argument("--dry-run", action="store_true")
+    p_speech.set_defaults(func=cmd_speech)
 
     p_doctor = sub.add_parser("doctor", help="只读自检：配置、/models、媒体模型覆盖情况")
     p_doctor.set_defaults(func=cmd_doctor)

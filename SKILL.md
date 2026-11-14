@@ -64,6 +64,8 @@ Never conclude that a model "does not exist" because one endpoint lacks it: ask 
 | Move configuration | `setup.sh export` / `import <file>` (no secrets) · `migrate` (from seedance) |
 | What can this endpoint do? | `media.py models [--kind image|video] [--json]` |
 | Text to image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` (`n>1` → `out-1.png`, `out-2.png`, …) |
+| Image editing | `media.py image -p "<prompt>" --model M --image ref.png [--mask m.png] [-o out.png]` |
+| Speech | `media.py speech -t "<text>" --model tts-1 [--voice alloy] [--format mp3] [-o out.mp3]` |
 | Text/image to video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [-o out.mp4]` |
 | Either, auto-detected | `media.py run --model M …` |
 | Task status / wait / fetch | `media.py status <id>` · `wait <id>` · `download <id> out.mp4` |
@@ -102,6 +104,8 @@ chat model. Attach `scripts/mcp_server.py` as an MCP server instead — five too
 - Keep keys, signed URLs and endpoint internals out of committed files and public reports.
 - A `custom`/`command` profile is only as trustworthy as its template/hook: verify once with a cheap
   `--dry-run` then a minimal real run before batch use. Read `references/custom-endpoints.md`.
-- Image-to-video needs a reference image the protocol accepts: Ark and MiniMax take local files
-  (base64), DashScope needs a public URL. The CLI refuses locally with a hint instead of failing
-  server-side.
+- Image-to-video: the `openai` protocol sends multipart `input_reference` (works on OpenAI Videos and
+  LiteLLM); Ark and MiniMax take local files (base64); DashScope needs a public URL and refuses
+  locally with a hint.
+- Speech output is raw audio; the suffix comes from `--format` (default `.mp3`). `run` refuses audio
+  models and points at `speech`.

@@ -33,7 +33,12 @@ class MinimaxProtocol(Protocol):
 
     # ------------------------------------------------------------- images
 
-    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> list[ImageResult]:
+    def image(
+        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None,
+        mask: str | None = None,
+    ) -> list[ImageResult]:
+        if mask:
+            raise MediaError(f"{self.name} 协议不支持遮罩（mask）")
         body: dict = {"model": model, "prompt": prompt, "n": n, "response_format": "base64"}
         if size:
             if "x" in size.lower() or "*" in size:

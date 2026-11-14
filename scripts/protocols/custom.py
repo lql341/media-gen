@@ -70,6 +70,7 @@ class CustomProtocol(Protocol):
 
     def _values(self, **kwargs) -> dict:
         values = {key: value for key, value in kwargs.items() if value is not None}
+        values.pop("mask", None)
         ref = values.pop("ref", None)
         if ref:
             mime, _ = mimetypes.guess_type(ref)
@@ -104,11 +105,13 @@ class CustomProtocol(Protocol):
 
     # ------------------------------------------------------------------ image
 
-    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> list[ImageResult]:
+    def image(
+        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None, mask: str | None = None
+    ) -> list[ImageResult]:
         config = self.spec.get("image")
         if not isinstance(config, dict):
             raise MediaError("该 custom 配置没有 image 段")
-        values = self._values(model=model, prompt=prompt, size=size, n=n, ref=ref)
+        values = self._values(model=model, prompt=prompt, size=size, n=n, ref=ref, mask=mask)
         method = str(config.get("method", "POST")).upper()
         url = self._path(config.get("path", "/"), values)
         body = self._render(config.get("body"), values)

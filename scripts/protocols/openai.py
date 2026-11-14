@@ -17,7 +17,10 @@ from __future__ import annotations
 import base64
 import json
 
-from . import Endpoint, ImageResult, MediaError, Protocol, VideoState, data_uri, error_message, guess_suffix
+from . import (
+    Endpoint, ImageResult, MediaError, Protocol, VideoState, data_uri, encode_multipart,
+    error_message, file_part, guess_suffix,
+)
 
 
 class OpenAIProtocol(Protocol):
@@ -36,23 +39,50 @@ class OpenAIProtocol(Protocol):
 
     # ------------------------------------------------------------- images
 
-    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> list[ImageResult]:
+    def image(
+        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None, mask: str | None = None
+    ) -> list[ImageResult]:
+        if ref:
+            # 参考图 / 遮罩：/images/edits（multipart）
+            fields = {"model": model, "prompt": prompt, "n": n, "response_format": "b64_json"}
+            if size:
+                fields["size"] = size
+            files = {"image": file_part(ref)}
+            if mask:
+                files["mask"] = file_part(mask)
+            body, content_type = encode_multipart(fields, files)
+            status, payload, raw = self._request(
+                "POST", self.endpoint.base_url + "/images/edits", body,
+                headers={"Content-Type": content_type},
+            )
+            if status >= 400:
+                raise MediaError(f"POST /images/edits → {status}：{error_message(payload, raw)}")
+            return _decode_image_response(payload)
         body: dict = {"model": model, "prompt": prompt, "n": n, "response_format": "b64_json"}
         if size:
             body["size"] = size
-        if ref:
-            # Image editing is a different route; sending it through the plain
-            # generation route is silently ignored by most gateways, so be explicit.
-            raise MediaError(
-                "openai 协议的图片参考图需要 /images/edits（multipart）；"
-                "先不带 --image 生成，或改用支持 image_input 的原生协议"
-            )
         status, payload, raw = self._request(
             "POST", self.endpoint.base_url + "/images/generations", body
         )
         if status >= 400:
             raise MediaError(f"POST /images/generations → {status}：{error_message(payload, raw)}")
         return _decode_image_response(payload)
+
+    def speech(self, model: str, text: str, *, voice: str | None, fmt: str | None) -> tuple[bytes, str]:
+        body: dict = {"model": model, "input": text}
+        if voice:
+            body["voice"] = voice
+        if fmt:
+            body["response_format"] = fmt
+        status, payload, raw = self._request("POST", self.endpoint.base_url + "/audio/speech", body)
+        if status >= 400:
+            raise MediaError(f"POST /audio/speech → {status}：{error_message(payload, raw)}")
+        if not raw:
+            raise MediaError("POST /audio/speech 没有返回音频内容")
+        suffix = "." + (fmt or "mp3").lstrip(".")
+        if suffix in (".pcm",):
+            suffix = ".pcm"
+        return raw, suffix
 
     # ------------------------------------------------------------- videos
 
@@ -80,11 +110,20 @@ class OpenAIProtocol(Protocol):
         if extra:
             body["extra_body"] = extra
         if ref:
-            raise MediaError(
-                "openai 协议的首帧图需要 multipart input_reference；"
-                "请用 --image 配合支持它的网关，或改用 ark / dashscope / minimax 原生协议"
+            # 图生视频：multipart + input_reference（OpenAI Videos / LiteLLM 的标准形态）
+            fields = {"model": model, "prompt": prompt}
+            for key, value in (("seconds", seconds), ("size", size)):
+                if value is not None:
+                    fields[key] = value
+            if extra:
+                fields["extra_body"] = json.dumps(extra, ensure_ascii=False)
+            body_bytes, content_type = encode_multipart(fields, {"input_reference": file_part(ref)})
+            status, payload, raw = self._request(
+                "POST", self.endpoint.base_url + "/videos", body_bytes,
+                headers={"Content-Type": content_type},
             )
-        status, payload, raw = self._request("POST", self.endpoint.base_url + "/videos", body)
+        else:
+            status, payload, raw = self._request("POST", self.endpoint.base_url + "/videos", body)
         if status >= 400:
             raise MediaError(f"POST /videos → {status}：{error_message(payload, raw)}")
         task_id = payload.get("id") or payload.get("task_id")
@@ -103,6 +142,7 @@ class OpenAIProtocol(Protocol):
             seconds=_as_text(payload.get("seconds") or result.get("duration")),
             size=_as_text(payload.get("size")),
             usage=payload.get("usage") or {},
+            last_frame_url=result.get("last_frame_url"),
             extra={k: v for k, v in payload.items() if k not in ("id", "object", "result", "usage")},
         )
         return state

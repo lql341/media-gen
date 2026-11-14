@@ -22,8 +22,18 @@ template list, or `{images:[…]}` from a `command` hook), every image is saved:
 `out.png` for a single result, `out-1.png`, `out-2.png`, … for several, and each path is printed on
 stdout (the MCP tool returns an array). Nothing is silently dropped.
 
-Reference images (editing) live on a different route (`/images/edits`, multipart). The adapter
-refuses `--image` with a pointer instead of silently ignoring it.
+**Editing** (`--image`, optional `--mask`) uses the separate multipart route:
+
+```
+POST /images/edits
+model=gpt-image-1  prompt=…  size=1024x1024  n=1  response_format=b64_json
+image=@reference.png  [mask=@mask.png]
+→ same response shape as /images/generations
+```
+
+The adapter switches routes automatically: no `--image` → `/images/generations`; with it →
+`/images/edits`. Native protocols handle the reference their own way (Ark: inline `image` data URI;
+MiniMax: `subject_reference`; DashScope: unsupported, clear error).
 
 ## ark (Volcengine Seedream)
 

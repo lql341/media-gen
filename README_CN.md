@@ -95,8 +95,10 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 | 目的 | 命令 |
 | --- | --- |
 | 看能生成什么 | `media.py models [--kind image|video]` |
+| 图片编辑 | `media.py image -p "<提示词>" --model M --image 参考图.png [--mask 遮罩.png] -o out.png` |
+| 语音合成 | `media.py speech -t "<文本>" --model tts-1 [--voice alloy] [--format mp3] -o out.mp3` |
 | 图片 | `media.py image -p "<提示词>" --model M [--size 1024x1024] [-n N] [-o out.png]`（`n>1` 写成 `out-1.png`、`out-2.png`…） |
-| 视频 | `media.py video -p "<提示词>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image 首帧图] [-o out.mp4]` |
+| 视频 | `media.py video -p "<提示词>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image 首帧图] [--last-frame 尾帧.png] [-o out.mp4]` |
 | 自动判种类 | `media.py run --model M …` |
 | 换账户 | `media.py --profile <name>@<alias>` / `--account <alias>` / `MEDIA_ACCOUNT` |
 | 任务 | `media.py status <id>` · `wait` · `download` · `--create-only` |

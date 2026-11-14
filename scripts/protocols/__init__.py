@@ -55,6 +55,7 @@ class VideoState:
     size: str | None = None
     usage: dict = field(default_factory=dict)
     extra: dict = field(default_factory=dict)
+    last_frame_url: str | None = None
 
     @property
     def done(self) -> bool:
@@ -63,6 +64,43 @@ class VideoState:
     @property
     def failed(self) -> bool:
         return self.status in ("failed", "error", "cancelled", "canceled")
+
+
+def encode_multipart(fields: dict, files: dict) -> tuple[bytes, str]:
+    """把字段与文件编码成 multipart/form-data（stdlib 实现，用于 /videos 与 /images/edits）。
+
+    files: {field_name: (filename, bytes, mime)}
+    """
+    import uuid
+
+    boundary = "----media-gen-" + uuid.uuid4().hex
+    chunks: list[bytes] = []
+    for name, value in fields.items():
+        if value is None:
+            continue
+        chunks.append(f'--{boundary}\r\n'.encode())
+        chunks.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
+        chunks.append(str(value).encode("utf-8"))
+        chunks.append(b"\r\n")
+    for name, (filename, payload, mime) in files.items():
+        chunks.append(f'--{boundary}\r\n'.encode())
+        chunks.append(
+            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'.encode()
+        )
+        chunks.append(f"Content-Type: {mime}\r\n\r\n".encode())
+        chunks.append(payload)
+        chunks.append(b"\r\n")
+    chunks.append(f"--{boundary}--\r\n".encode())
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+
+def file_part(path: str) -> tuple[str, bytes, str]:
+    import os as _os
+
+    mime, _ = mimetypes.guess_type(path)
+    with open(path, "rb") as handle:
+        payload = handle.read()
+    return _os.path.basename(path), payload, mime or "application/octet-stream"
 
 
 def data_uri(path: str) -> str:
@@ -141,8 +179,13 @@ class Protocol:
     def list_models(self) -> list[str] | None:
         return None
 
-    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> ImageResult:
+    def image(
+        self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None, mask: str | None = None
+    ) -> list[ImageResult]:
         raise MediaError(f"{self.name} 协议不支持图片生成")
+
+    def speech(self, model: str, text: str, *, voice: str | None, fmt: str | None) -> tuple[bytes, str]:
+        raise MediaError(f"{self.name} 协议不支持语音合成（/audio/speech）")
 
     def video_create(
         self,

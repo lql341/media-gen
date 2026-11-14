@@ -99,8 +99,9 @@ suite runs with `none` and asserts zero keyring operations.
 | --- | --- |
 | discover | `media.py models [--kind image|video] [--json]` |
 | pick an account | `media.py --profile <name>@<alias> …` or `--account <alias>` / `MEDIA_ACCOUNT` |
-| image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` (batch → `out-1.png`, `out-2.png`, …) |
-| video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [-o out.mp4]` |
+| image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [--image ref.png --mask m.png] [-o out.png]` (batch → `out-1.png`, …) |
+| speech | `media.py speech -t "<text>" --model tts-1 [--voice alloy] [--format mp3] [-o out.mp3]` |
+| video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [--last-frame f.png] [-o out.mp4]` |
 | either | `media.py run --model M …` (kind from the registry) |
 | tasks | `media.py status <id>` · `wait <id>` · `download <id> out.mp4` · `--create-only` |
 | no spend | add `--dry-run` |
@@ -112,7 +113,8 @@ SKILL.md                       routing by intent, money discipline, failure tabl
 references/first-use.md        what to prepare, what the user runs
 references/setup.md            profiles, precedence, rotation, CI, security
 references/routing-image.md    image routes per protocol
-references/routing-video.md    video routes per protocol (poll + fetch)
+references/routing-video.md    video routes per protocol (poll + fetch, image-to-video, last frame)
+references/audio.md            speech synthesis (/audio/speech)
 references/providers.md        per-provider quirks + verification status
 references/custom-endpoints.md  custom templates + command hooks for in-house APIs
 references/interactive.md      wizard flows, cross-platform entry points, credential-store switch

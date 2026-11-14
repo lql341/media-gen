@@ -69,6 +69,60 @@ class OpenAITest(unittest.TestCase):
             self.assertTrue(state.done)
             self.assertEqual(protocol.video_fetch(task, state), MP4)
 
+    def test_image_edit_uses_multipart_edits(self):
+        import tempfile
+
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
+                handle.write(b"\x89PNG\r\n\x1a\nREF")
+                ref = handle.name
+            try:
+                results = protocol.image("gpt-image-1", "make it blue", size="512x512", n=1, ref=ref)
+                self.assertEqual(results[0].data, PNG)
+            finally:
+                os.unlink(ref)
+            call = [c for c in server.state.calls if c[1] == "/v1/images/edits"][0]
+            self.assertTrue(call is not None)
+
+    def test_video_with_reference_uses_multipart(self):
+        import tempfile
+
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
+                handle.write(b"\x89PNG\r\n\x1a\nREF")
+                ref = handle.name
+            try:
+                task = protocol.video_create(
+                    "doubao-seedance-2-5", "animate this", seconds=5, size=None,
+                    resolution="720p", ratio="16:9", ref=ref,
+                )
+                self.assertEqual(task, "video_1")
+            finally:
+                os.unlink(ref)
+
+    def test_last_frame_url_is_exposed(self):
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            task = protocol.video_create("doubao-seedance-2-5", "x", seconds=5, size=None,
+                                         resolution=None, ratio=None, ref=None)
+            protocol.video_status(task)
+            state = protocol.video_status(task)
+            self.assertTrue(state.done)
+            self.assertTrue(state.last_frame_url.endswith("/files/last.png"))
+            self.assertEqual(protocol.fetch(state.last_frame_url), PNG)
+
+    def test_speech(self):
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            payload, suffix = protocol.speech("tts-1", "hello", voice="alloy", fmt="mp3")
+            self.assertEqual(payload, b"ID3FAKEAUDIO")
+            self.assertEqual(suffix, ".mp3")
+            body = [c for c in server.state.calls if c[1] == "/v1/audio/speech"][0][2]
+            self.assertEqual(body["input"], "hello")
+            self.assertEqual(body["voice"], "alloy")
+
     def test_video_ratio_resolution_goes_into_extra_body(self):
         with MockServer() as server:
             protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
@@ -87,15 +141,44 @@ class OpenAITest(unittest.TestCase):
             self.assertTrue(state.failed)
             self.assertEqual(state.error, "boom")
 
-    def test_reference_image_is_refused_with_a_hint(self):
+    # 参考图现在是支持的（multipart），见 test_video_with_reference_uses_multipart
+
+    def test_video_ratio_resolution_goes_into_extra_body(self):
         with MockServer() as server:
             protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
-            with self.assertRaises(MediaError) as raised:
-                protocol.video_create(
+            protocol.video_create(
+                "doubao-seedance-2-5", "a cat", seconds=-1, size=None,
+                resolution="720p", ratio="16:9", ref=None,
+            )
+            body = [call for call in server.state.calls if call[1] == "/v1/videos"][0][2]
+            self.assertEqual(body["extra_body"], {"ratio": "16:9", "resolution": "720p"})
+
+    def test_video_failure_is_reported(self):
+        with MockServer() as server:
+            server.state.video_mode = "fail"
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            state = protocol.video_status("video_1")
+            self.assertTrue(state.failed)
+            self.assertEqual(state.error, "boom")
+
+    def test_reference_image_goes_multipart(self):
+        import tempfile
+
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
+                handle.write(b"\x89PNG\r\n\x1a\nREF")
+                ref = handle.name
+            try:
+                task = protocol.video_create(
                     "doubao-seedance-2-5", "x", seconds=5, size=None,
-                    resolution=None, ratio=None, ref=os.path.abspath(__file__),
+                    resolution=None, ratio=None, ref=ref,
                 )
-            self.assertIn("input_reference", str(raised.exception))
+                self.assertEqual(task, "video_1")
+            finally:
+                os.unlink(ref)
+            # 有首帧图时必须是 multipart（input_reference），不是 JSON
+            self.assertTrue(any("multipart/form-data" in ctype for ctype in server.state.content_types))
 
 
 class ArkTest(unittest.TestCase):

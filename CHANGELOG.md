@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0 - 2026-11-14
+
+The remaining route gaps: image-to-video on gateways, image editing, last frames, speech.
+
+- **Image-to-video over the `openai` protocol**: with `--image` the CLI now posts multipart
+  `input_reference` to `/videos` — the documented shape for OpenAI's Videos API and LiteLLM's
+  `/videos` (their OpenAPI declares exactly that binary field). No more "use a native protocol" for
+  gateways. Verified against the gateway's own `openapi.json`, not against marketing docs.
+- **Image editing**: `--image` (plus optional `--mask`) switches `/images/generations` →
+  multipart `/images/edits`; native protocols keep their own reference mechanism and DashScope still
+  refuses locally with a hint.
+- **Last frame**: `VideoState.last_frame_url` is parsed and exposed; `--last-frame out.png` saves it
+  after a run (useful for chaining clips), and `status` prints it.
+- **Speech**: new `media.py speech -t … --model tts-1 [--voice] [--format] [-o out.mp3]` over
+  `/audio/speech`; registry gains the `audio` kind (`tts-1*`, `gpt-4o-mini-tts*`, `speech-*`,
+  `cosyvoice*`), `models --kind audio` lists them, and `run` points at `speech` instead of guessing.
+- Shared stdlib multipart encoder (no `requests` dependency) used by both multipart paths.
+- Tests: multipart edit, multipart i2v (content-type asserted), last-frame fetch, speech bytes, plus
+  CLI end-to-end for all four; mock server grew `/images/edits`, `/audio/speech` and a last-frame URL.
+
 ## 0.6.0 - 2026-11-14
 
 Batch images are no longer truncated to the first result.
