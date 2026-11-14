@@ -1,0 +1,32 @@
+# 凭据 —— 绝不入库
+auth.json
+.env
+.env.*
+*.key
+*.pem
+credentials*
+*.token
+
+# 本机配置（脚本写的是 ~/.config/seedance，这里只是防止误拷进仓库）
+config.json
+seedance/config.json
+
+# 生成物
+*.mp4
+*.gif
+
+# 备份
+*.bak
+*.bak.*
+*.orig
+
+# 编辑器 / 系统
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
