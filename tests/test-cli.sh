@@ -107,6 +107,8 @@ check "run 提示改用 transcribe" "transcribe" "$("$PY" "$CLI" run -p x --mode
 echo "== 任务查询"
 check "status 返回 JSON" '"task_id"' "$("$PY" "$CLI" status video_1)"
 check "wait 输出 completed" '"completed"' "$("$PY" "$CLI" wait video_1 --interval 0)"
+out=$("$PY" "$CLI" download video_1 "$TMP/dl2.mp4" --last-frame "$TMP/dl2-last.png" 2>&1)
+check "download --last-frame 走通（mock 有尾帧）" "尾帧已保存" "$out"
 check "download 复用完成的产物" "$TMP/d.mp4" "$("$PY" "$CLI" download video_1 "$TMP/d.mp4" 2>/dev/null)"
 
 echo "== run 自动判种类"

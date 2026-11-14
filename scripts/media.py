@@ -400,6 +400,14 @@ def cmd_download(args) -> int:
     out = args.out or default_output("video")
     write_artifact(out, payload)
     announce(f"{len(payload)} 字节")
+    last_frame = getattr(args, "last_frame", None)
+    if last_frame:
+        if state.last_frame_url:
+            data = protocol.fetch(state.last_frame_url)
+            write_artifact(os.path.expanduser(last_frame), data)
+            announce(f"尾帧已保存 {last_frame}（{len(data)} 字节）")
+        else:
+            announce("该任务没有返回 last_frame_url，未保存尾帧（网关不支持时属正常）")
     print(out)
     return 0
 
@@ -433,7 +441,7 @@ def cmd_speech(args) -> int:
         die("speech 需要 --model（或用 setup.sh add … --default-audio 保存默认值）", 2)
     if args.dry_run:
         print(json.dumps({
-            "profile": name, "protocol": profile["protocol"], "kind": "audio",
+            "profile": name, "protocol": profile["protocol"], "kind": "speech",
             "model": model, "input": args.text, "voice": args.voice, "format": args.format,
         }, ensure_ascii=False, indent=2))
         return 0
@@ -594,6 +602,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_download = sub.add_parser("download", help="下载已完成的视频")
     p_download.add_argument("task_id")
     p_download.add_argument("out", nargs="?")
+    p_download.add_argument("--last-frame", help="同时保存尾帧到该路径（任务未提供时只提示）")
     p_download.set_defaults(func=cmd_download)
 
     p_speech = sub.add_parser("speech", help="语音合成（/audio/speech，返回音频文件）")
@@ -630,7 +639,13 @@ def main(argv: list[str] | None = None) -> int:
     except config.ConfigError as error:
         die(str(error), 2)
     except MediaError as error:
-        die(str(error))
+        message = str(error)
+        if "not allowed to access model" in message:
+            message += (
+                "\n提示：这不是模型不存在，而是这把 key 的团队白名单里没有它。"
+                "先运行 media.py models 看当前可用列表，或让网关管理员放开。"
+            )
+        die(message)
     except KeyboardInterrupt:
         print("已中断", file=sys.stderr)
         return 130

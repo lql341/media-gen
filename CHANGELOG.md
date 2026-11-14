@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.2 - 2026-11-14
+
+macOS verification sweep, plus two small correctness fixes.
+
+- `download <id> out --last-frame f.png`: fetch the尾帧 for an existing task (0 cost); when the
+  gateway returns `last_frame_url: null` it says so instead of failing.
+- 403 `team not allowed to access model` now carries a hint: it is an allowlist problem, not a missing
+  model — run `media.py models` or ask the gateway operator.
+- `speech --dry-run` reports `kind: speech` (was `audio`, inconsistent with the registry kinds).
+- `docs/VERIFICATION.md`: live matrix with the exact commands and token costs (t2v, i2v, status, wait,
+  download, last-frame-absent, 5 zero-cost negative paths, gateway model inventory), plus the list of
+  capabilities that remain mock-only and why.
+
 ## 0.9.1 - 2026-11-14
 
 Platform-branch tests, and a real bug they caught.
