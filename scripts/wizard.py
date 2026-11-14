@@ -518,6 +518,7 @@ def dispatch(action: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    config.ensure_utf8_stdio()
     arguments = list(sys.argv[1:] if argv is None else argv)
     try:
         if not arguments:

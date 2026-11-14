@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.13.1 - 2026-11-15
+
+首次 CI 跑出来的三个真问题。
+
+- **Windows 上 Python 一输出中文就崩**（`mcp_server` 的 `initialize` 里有个 `…` 就直接
+  `UnicodeEncodeError`，整个 MCP 服务器起不来）：新增 `media_config.ensure_utf8_stdio()`，
+  `media.py` / `media_config.py` / `wizard.py` / `mcp_server.py` 四个入口在写任何输出前把
+  stdout/stderr 切到 UTF-8；重定向到 `StringIO` 时自动跳过。
+- **CI 的 macOS 任务起不来 mock server**：`test-cli.sh` 原来每个 0.1s 起一个 python 去解析端口日志
+  （冷启动的 runner 上等不到），改成 `mock_server.py --port-file` + 进程存活检查。
+- **矩阵里 python 3.9 在 ubuntu-latest 上不存在**（runner 已经升到 26.04）：3.9 固定跑
+  ubuntu-22.04，3.12 跑 ubuntu-latest / macos-latest。
+
 ## 0.13.0 - 2026-11-15
 
 视频不再整块进内存；第一次有 CI。

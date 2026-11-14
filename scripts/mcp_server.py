@@ -381,6 +381,7 @@ def handle(request: dict) -> dict | None:
 
 
 def serve() -> int:
+    config.ensure_utf8_stdio()
     for line in sys.stdin:
         line = line.strip()
         if not line:

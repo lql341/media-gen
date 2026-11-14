@@ -18,21 +18,21 @@ unset MEDIA_PROFILE MEDIA_PROTOCOL MEDIA_API_KEY MEDIA_API_KEY_DEFAULT 2>/dev/nu
 SERVER_PID=""
 PORT=""
 start_server() {
-  "$PY" "$ROOT/tests/mock_server.py" >"$TMP/server.log" 2>&1 &
+  rm -f "$TMP/port.json"
+  "$PY" "$ROOT/tests/mock_server.py" --port-file "$TMP/port.json" >"$TMP/server.log" 2>&1 &
   SERVER_PID=$!
-  for _ in $(seq 1 100); do
-    PORT=$("$PY" - "$TMP/server.log" <<'PY' 2>/dev/null || true
-import json, sys
-try:
-    print(json.loads(open(sys.argv[1]).readline().strip())["port"])
-except Exception:
-    pass
-PY
-    )
-    [ -n "$PORT" ] && return 0
-    sleep 0.05
+  # 冷启动的 CI 机器上 python 起得慢：等端口文件，同时尽早发现进程已退出
+  for _ in $(seq 1 200); do
+    if [ -s "$TMP/port.json" ]; then
+      PORT=$(sed -E 's/.*"port": *([0-9]+).*/\1/' "$TMP/port.json")
+      [ -n "$PORT" ] && return 0
+    fi
+    kill -0 "$SERVER_PID" 2>/dev/null || break
+    sleep 0.1
   done
-  echo "mock server 未能启动" >&2; cat "$TMP/server.log" >&2; exit 1
+  echo "mock server 未能启动（pid ${SERVER_PID}，日志：）" >&2
+  cat "$TMP/server.log" >&2
+  exit 1
 }
 
 fail=0

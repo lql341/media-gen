@@ -20,8 +20,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python: ["3.9", "3.12"]
+        include:
+          # 3.9 只在 22.04 上有：ubuntu-latest 已经是 26.04，setup-python 找不到 3.9
+          - os: ubuntu-22.04
+            python: "3.9"
+          - os: ubuntu-latest
+            python: "3.12"
+          - os: macos-latest
+            python: "3.12"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

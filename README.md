@@ -154,9 +154,10 @@ Six suites, all offline: registry unit tests, protocol adapters against a script
 (create → poll → download, request bodies inspected), configuration/credential precedence in a
 temp `HOME`, the interactive wizard (piped answers), the MCP server over stdio, and CLI end-to-end
 through the mock. No network, no account, no spend, **and no keyring access**
-(`MEDIA_CREDENTIAL_STORE=none`, asserted). CI runs the same script on ubuntu/macos ×
-python 3.9/3.12, plus a Windows job for the pure-Python suites — every job is offline, so a
-green build costs nothing and proves nothing was sent to a paid endpoint.
+(`MEDIA_CREDENTIAL_STORE=none`, asserted). CI runs the same script on ubuntu 22.04
+(python 3.9), ubuntu-latest and macos-latest (python 3.12), plus a Windows job for the pure-Python
+suites — every job is offline, so a green build costs nothing and proves nothing was sent to a paid
+endpoint.
 
 ## Before publishing
 

@@ -548,6 +548,21 @@ def resolve_key(profile_name: str, profile: dict) -> tuple[str | None, str]:
     return None, "未配置"
 
 
+def ensure_utf8_stdio() -> None:
+    """Windows 控制台默认不是 UTF-8（cp1252/cp936）：中文输出会 UnicodeEncodeError。
+
+    在写任何东西之前把 stdout/stderr 切到 UTF-8；被重定向到 StringIO 时跳过。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def mask(secret: str) -> str:
     if len(secret) <= 10:
         return "已配置（短密钥不显示尾部）"
@@ -1088,6 +1103,7 @@ def _manage(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    ensure_utf8_stdio()
     import argparse
 
     parser = argparse.ArgumentParser(prog="media_config.py", description="media-gen 配置与凭据")

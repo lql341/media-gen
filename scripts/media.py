@@ -952,6 +952,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    config.ensure_utf8_stdio()
     args = build_parser().parse_args(argv)
     if getattr(args, "account", None):
         # 账户选择落在环境里，供 media_config.require_profile 统一解析（与 MEDIA_ACCOUNT 同义）

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -290,6 +291,13 @@ if __name__ == "__main__":
 
     server = MockServer()
     server.thread.start()
+    # --port-file <path>：把端口原子写进文件，调用方不用反复起 python 去解析 stdout
+    if "--port-file" in sys.argv:
+        target = sys.argv[sys.argv.index("--port-file") + 1]
+        temporary = f"{target}.part"
+        with open(temporary, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps({"port": server.port}))
+        os.replace(temporary, target)
     print(json.dumps({"port": server.port}), flush=True)
     try:
         server.thread.join()
