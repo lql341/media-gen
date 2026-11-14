@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.2 - 2026-11-14
+
+Reuse older credentials instead of duplicating them.
+
+- **`--credential-ref <service>:<account>`** on `add`, plus `set-credential-ref`: a profile can use an
+  existing credential-store item in place (e.g. the legacy `seedance-gateway/default`) with no copy
+  and no write. Resolution order: env → `credential_ref` → `media-gen/<profile>` → legacy item →
+  inline 0600 key → agent auth import.
+- **`migrate --to <profile> [--delete-legacy]`**: copies the old config + secret under the new name,
+  and deleting the old item still requires `MEDIA_ALLOW_CREDENTIAL_DELETE=1`.
+- **`audit` never decrypts**: existence is checked with `security find-generic-password` *without*
+  `-w` (and `secret-tool lookup` only where unavoidable), and the legacy item is always reported as
+  read-only.
+- Docs: MIGRATION.md documents the three options (reuse in place / copy / copy+delete), setup.md and
+  troubleshooting updated.
+
 ## 0.4.1 - 2026-11-14
 
 Safety fix: nothing deletes a stored secret by default any more.

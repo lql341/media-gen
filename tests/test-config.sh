@@ -107,6 +107,15 @@ check "rm --all 后只剩 legacy 回退档" "legacy" "$("$PY" "$CFG" list)"
 if "$PY" "$CFG" list | grep -q "primary"; then echo "FAIL  rm --all 后仍能看到 primary"; fail=1; else echo "ok    rm --all 后 primary 已消失"; fi
 
 
+echo "== 复用已有凭据库条目（credential_ref）"
+expect_exit "条目不存在时拒绝复用" 2 "$PY" "$CFG" add reuse --protocol openai \
+  --base-url https://reuse.example/v1 --store file --credential-ref no-such-service:acct
+out=$("$PY" "$CFG" audit)
+check "audit 输出删除闸门" "删除闸门" "$out"
+check "audit 标注旧条目只读" "本工具不会删除它" "$out"
+out=$(MEDIA_CREDENTIAL_STORE=none "$PY" "$CFG" migrate --to old2 --store file --delete-legacy 2>&1)
+check "无旧条目时 migrate 说明无需删除" "无需删除" "$out"
+
 echo "== 删除闸门：默认绝不删凭据库条目"
 out=$(MEDIA_ALLOW_CREDENTIAL_DELETE= "$PY" "$CFG" audit 2>&1)
 check "audit 显示默认不删" "未设置（默认不删）" "$out"

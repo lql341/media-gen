@@ -31,6 +31,7 @@ Never conclude that a model "does not exist" because one endpoint lacks it: ask 
 - `scripts/setup.sh status` and `scripts/setup.sh list` first — configuration may already exist.
 - Missing configuration → read `references/first-use.md`, then have the user run, in **their own
   terminal**: `scripts/setup.sh add <name> --protocol <p> --base-url <url>`.
+- Prefer reusing an existing credential-store item (`--credential-ref`) over copying a secret.
 - Never ask for, accept, echo, or store an API key in chat. The key prompt is hidden; the store is
   macOS Keychain / `secret-tool`; environment variables beat everything.
 - Never invent a base URL. There is no built-in default endpoint, by design.
@@ -57,6 +58,7 @@ Never conclude that a model "does not exist" because one endpoint lacks it: ask 
 | Change one thing | `setup.sh modify <name>` · `set-url` · `set-key` · `set-protocol` · `rename` |
 | Remove (config only) | `setup.sh rm <name>` · `rm --all` — secrets are never deleted unless `MEDIA_ALLOW_CREDENTIAL_DELETE=1` |
 | Audit the store | `setup.sh audit` (read-only: which items, which exact commands, is the delete gate set) |
+| Reuse an existing store item | `setup.sh add <name> --credential-ref <service>:<account>` (no copy, no write) |
 | Move configuration | `setup.sh export` / `import <file>` (no secrets) · `migrate` (from seedance) |
 | What can this endpoint do? | `media.py models [--kind image|video] [--json]` |
 | Text to image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` |

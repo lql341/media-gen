@@ -98,6 +98,23 @@ environment variables there.
 each access (`store: read media-gen/litellm via macOS Keychain`) so you can audit it. The test suite
 runs with `none` and asserts zero keyring operations.
 
+## Reuse an existing store item instead of copying it
+
+A profile can point at any existing credential-store item, so a secret that already lives in the
+Keychain (from an earlier install, another tool, or a `seedance-gateway` legacy item) is used in
+place — nothing is copied, nothing is written:
+
+```bash
+scripts/setup.sh add litellm --protocol openai --base-url https://gw/v1 \
+    --credential-ref seedance-gateway:default
+scripts/setup.sh set-credential-ref litellm --ref ""     # forget it, go back to media-gen/litellm
+```
+
+Resolution order for the key becomes: env → `credential_ref` → `media-gen/<profile>` → legacy
+`seedance-gateway` (only for a profile literally named `legacy`) → inline 0600 key → agent auth
+import. `audit` shows which item each profile uses and whether it exists, **without decrypting it**
+(it uses `security find-generic-password` without `-w`).
+
 ## Deleting secrets is opt-in (default: never)
 
 `setup.sh rm` removes the **configuration**, not your secret. Deleting the credential-store item

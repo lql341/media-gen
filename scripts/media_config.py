@@ -266,6 +266,20 @@ def store_call_log() -> list[str]:
     return list(_STORE_CALLS)
 
 
+def _store_has(service: str, account: str) -> bool:
+    """Existence check only — unlike _read_store, this never decrypts the secret."""
+    provider = secure_store_name()
+    if provider is None:
+        return False
+    if provider == "macOS Keychain":
+        command = ["security", "find-generic-password", "-s", service, "-a", account]
+    else:
+        command = ["secret-tool", "lookup", "service", service, "account", account]
+    _debug_store(f"exists {service}/{account} via {provider}")
+    completed = _run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True, check=False)
+    return completed.returncode == 0
+
+
 def _debug_store(message: str) -> None:
     _STORE_CALLS.append(message)
     if os.environ.get("MEDIA_DEBUG_STORE", "").strip() in ("1", "true", "yes"):
@@ -341,7 +355,7 @@ def store_key(profile: str, key: str) -> str:
 
 
 def delete_allowed() -> bool:
-    """Deleting a stored secret is opt-in: MEDIA_ALLOW_CREDENTIAL_DELETE=1 plus a real TTY."""
+    """Deleting a stored secret is opt-in via MEDIA_ALLOW_CREDENTIAL_DELETE=1 (no implicit path)."""
     return os.environ.get("MEDIA_ALLOW_CREDENTIAL_DELETE", "").strip() == "1"
 
 
@@ -354,6 +368,20 @@ def describe_delete(profile: str) -> str:
     return "（本机没有可用的系统凭据库）"
 
 
+def _delete_store_item(service: str, account: str) -> bool:
+    provider = secure_store_name()
+    if provider is None:
+        return False
+    _STORE_CACHE.pop((service, account), None)
+    if provider == "macOS Keychain":
+        command = ["security", "delete-generic-password", "-s", service, "-a", account]
+    else:
+        command = ["secret-tool", "clear", "service", service, "account", account]
+    _debug_store(f"delete {service}/{account}")
+    completed = _run(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, check=False)
+    return completed.returncode == 0
+
+
 def delete_key(profile: str) -> bool:
     """Delete one profile's secret. Never runs unless MEDIA_ALLOW_CREDENTIAL_DELETE=1."""
     if not delete_allowed():
@@ -362,16 +390,7 @@ def delete_key(profile: str) -> bool:
             f"  MEDIA_ALLOW_CREDENTIAL_DELETE=1 {sys.argv[0]} rm {profile}\n"
             f"  或手工：{describe_delete(profile)}"
         )
-    _STORE_CACHE.pop((SERVICE, profile), None)
-    provider = secure_store_name()
-    if provider == "macOS Keychain":
-        command = ["security", "delete-generic-password", "-s", SERVICE, "-a", profile]
-    elif provider == "Secret Service":
-        command = ["secret-tool", "clear", "service", SERVICE, "account", profile]
-    else:
-        return False
-    completed = _run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True, check=False)
-    return completed.returncode == 0
+    return _delete_store_item(SERVICE, profile)
 
 
 def agent_auth_key() -> tuple[str, str] | None:
@@ -392,12 +411,27 @@ def agent_auth_key() -> tuple[str, str] | None:
     return None
 
 
+def parse_credential_ref(value: str) -> tuple[str, str]:
+    """`service:account`（account 省略时取 default）。"""
+    text = str(value).strip()
+    service, _, account = text.partition(":")
+    if not service:
+        raise ConfigError("credential_ref 需要 service:account，例如 seedance-gateway:default")
+    return service, (account or "default")
+
+
 def resolve_key(profile_name: str, profile: dict) -> tuple[str | None, str]:
     env_specific = f"MEDIA_API_KEY_{re.sub(r'[^A-Za-z0-9]', '_', profile_name).upper()}"
     for name in (env_specific, *ENV_KEY):
         value = os.environ.get(name, "")
         if value:
             return normalize_secret(value, name), name
+    ref = profile.get("credential_ref")
+    if isinstance(ref, str) and ref:
+        service, account = parse_credential_ref(ref)
+        stored = _read_store(service, account)
+        if stored:
+            return stored, f"{secure_store_name() or 'credential store'}（复用条目 {service}/{account}）"
     stored = _read_store(SERVICE, profile_name)
     if stored:
         return stored, secure_store_name() or "credential store"
@@ -562,6 +596,18 @@ def _manage(args) -> int:
             else:
                 print(f"密钥已写入 {store_key(args.name, old_key)}")
         print(f"已迁移到配置档 {args.name}（来源：{legacy_source}）")
+        if args.delete_legacy:
+            if not _store_has(LEGACY_SERVICE, "default"):
+                print("旧条目不存在，无需删除")
+            elif not delete_allowed():
+                print("未删除旧条目（默认保护）：")
+                print(f"  MEDIA_ALLOW_CREDENTIAL_DELETE=1 后重跑，或手工执行：")
+                print(f"  security delete-generic-password -s {LEGACY_SERVICE} -a default")
+            else:
+                removed = _delete_store_item(LEGACY_SERVICE, "default")
+                print("旧条目已删除" if removed else "旧条目删除失败（请检查解锁状态）")
+        elif _store_has(LEGACY_SERVICE, "default"):
+            print(f"旧条目 {LEGACY_SERVICE}/default 保留（只读兼容）；要清理见 setup.sh audit")
         return 0
 
     if args.command == "audit":
@@ -573,10 +619,22 @@ def _manage(args) -> int:
         if not found:
             print("配置档        （无）")
         for name in sorted(found):
-            exists = "有" if _read_store(SERVICE, name) else "无"
-            print(f"  {name:<14} 条目: {exists:<2} 删除命令: {describe_delete(name)}")
-        legacy = _read_store(LEGACY_SERVICE, "default")
-        print(f"  旧条目 legacy  条目: {'有' if legacy else '无'}（只读兼容，本工具不会删除它）")
+            ref = found[name].get("credential_ref")
+            if isinstance(ref, str) and ref:
+                service, account = parse_credential_ref(ref)
+                exists = "有" if _store_has(service, account) else "无"
+                print(f"  {name:<14} 复用条目 {service}/{account}: {exists}（不复制、不删除）")
+            else:
+                exists = "有" if _store_has(SERVICE, name) else "无"
+                print(f"  {name:<14} 条目: {exists:<2} 删除命令: {describe_delete(name)}")
+        legacy_exists = _store_has(LEGACY_SERVICE, "default")
+        print()
+        print(f"旧条目 {LEGACY_SERVICE}/default 条目: {'有' if legacy_exists else '无'}（本工具不会删除它）")
+        if legacy_exists:
+            print("  本工具不会删除它；要复用/搬家：")
+            print(f"    {sys.argv[0]} migrate --to <profile>              # 复制到 media-gen/<profile>")
+            print(f"    {sys.argv[0]} migrate --to <profile> --delete-legacy --store auto   # 复制后删除旧条目（需闸门）")
+            print(f"    手工删除：med=1 时执行 security delete-generic-password -s {LEGACY_SERVICE} -a default")
         return 0
 
     if args.command == "show":
@@ -657,6 +715,27 @@ def _manage(args) -> int:
         config["profiles"] = block
         write_config(config)
         print(f"{args.name} 的协议 → {args.protocol}")
+        return 0
+
+    if args.command == "set-credential-ref":
+        config = read_config()
+        block = config.get("profiles") or {}
+        if args.name not in block:
+            raise ConfigError(f"没有名为 {args.name} 的配置档")
+        entry = dict(block[args.name])
+        value = (args.ref or "").strip()
+        if not value:
+            entry.pop("credential_ref", None)
+            print(f"{args.name} 不再复用外部条目（改回使用 media-gen/{args.name}）")
+        else:
+            service, account = parse_credential_ref(value)
+            if not _store_has(service, account):
+                raise ConfigError(f"凭据库条目 {service}/{account} 不存在")
+            entry["credential_ref"] = f"{service}:{account}"
+            print(f"{args.name} 将复用 {service}/{account}（不复制密钥）")
+        block[args.name] = entry
+        config["profiles"] = block
+        write_config(config)
         return 0
 
     if args.command == "rename":
@@ -768,6 +847,13 @@ def _manage(args) -> int:
         entry.pop("custom_file", None)
         entry.pop("command", None)
 
+    if args.credential_ref:
+        service, account = parse_credential_ref(args.credential_ref)
+        if not _store_has(service, account):
+            raise ConfigError(f"凭据库条目 {service}/{account} 不存在；先用 audit 确认")
+        entry["credential_ref"] = f"{service}:{account}"
+        entry.pop("api_key", None)
+        print(f"将复用凭据库条目 {service}/{account}（不复制密钥）")
     defaults = dict(entry.get("default_models") or {})
     if args.default_image:
         defaults["image"] = args.default_image
@@ -824,6 +910,7 @@ def main(argv: list[str] | None = None) -> int:
     p_add.add_argument("--custom-file", help="custom 协议的模板文件（会复制到 ~/.config/media-gen/custom/<name>.json）")
     p_add.add_argument("--command-json", help='command 协议的命令表，如 {"create":"…","status":"…","fetch":"…"}')
     p_add.add_argument("--command-file", help="command 命令表的 JSON 文件")
+    p_add.add_argument("--credential-ref", help="复用已有凭据库条目，格式 service:account（如 seedance-gateway:default）")
     p_use = sub.add_parser("use", help="设为默认配置档")
     p_use.add_argument("name")
     p_rm = sub.add_parser("rm", help="删除配置档（--all 删全部）")
@@ -847,6 +934,9 @@ def main(argv: list[str] | None = None) -> int:
     p_setproto.add_argument("--custom-file")
     p_setproto.add_argument("--command-json")
     p_setproto.add_argument("--command-file")
+    p_cref = sub.add_parser("set-credential-ref", help="让配置档复用已有凭据库条目（service:account）")
+    p_cref.add_argument("name")
+    p_cref.add_argument("--ref", help="service:account；传空字符串则清除")
     p_rename = sub.add_parser("rename", help="重命名配置档（密钥条目一起搬）")
     p_rename.add_argument("old")
     p_rename.add_argument("new")
@@ -855,13 +945,15 @@ def main(argv: list[str] | None = None) -> int:
     p_import.add_argument("file")
     p_mig = sub.add_parser("migrate", help="把旧的 seedance 配置/凭据迁到 media-gen")
     p_mig.add_argument("--name", default="legacy")
+    p_mig.add_argument("--to", dest="name", help="目标配置档名（同 --name）")
+    p_mig.add_argument("--delete-legacy", action="store_true", help="复制成功后删除旧 seedance-gateway 条目（需 MEDIA_ALLOW_CREDENTIAL_DELETE=1）")
     p_mig.add_argument("--store", choices=("auto", "file"), default="auto")
     args = parser.parse_args(argv)
 
     try:
         if args.command in (
             "add", "use", "rm", "list", "migrate", "show", "set-key", "set-url", "audit",
-            "set-protocol", "rename", "export", "import",
+            "set-protocol", "rename", "export", "import", "set-credential-ref",
         ):
             return _manage(args)
         name, profile = require_profile(args.profile)

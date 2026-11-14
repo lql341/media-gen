@@ -11,11 +11,23 @@
 | `scripts/seedance.sh run/gen/status/wait/download` | `scripts/media.py video …` (shim kept) |
 | video only | image + video, four protocols |
 
+## Three ways to handle the old credential
+
+| Want | Do |
+| --- | --- |
+| keep using the old Keychain item, no copy | `scripts/setup.sh add litellm --protocol openai --base-url <URL> --credential-ref seedance-gateway:default` |
+| move it under the new name | `scripts/setup.sh migrate --to litellm` (copies to `media-gen/litellm`; old item stays) |
+| move it **and** delete the old item | `MEDIA_ALLOW_CREDENTIAL_DELETE=1 scripts/setup.sh migrate --to litellm --delete-legacy` |
+
+`scripts/setup.sh audit` shows the current situation and the exact commands; deleting anything is
+refused unless `MEDIA_ALLOW_CREDENTIAL_DELETE=1`.
+
 ## Steps
 
 ```bash
 git pull                     # or re-clone; the skill is the repository
-scripts/setup.sh migrate     # creates profile "legacy" from the old config + old Keychain item
+scripts/setup.sh audit       # what exists today (read-only, no secrets printed)
+scripts/setup.sh add litellm --protocol openai --base-url <URL> --credential-ref seedance-gateway:default
 scripts/setup.sh list
 scripts/setup.sh status --profile legacy
 scripts/setup.sh add litellm --protocol openai --base-url https://<your-gateway>/v1 \
