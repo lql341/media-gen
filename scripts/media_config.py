@@ -634,7 +634,8 @@ def _manage(args) -> int:
             print("  本工具不会删除它；要复用/搬家：")
             print(f"    {sys.argv[0]} migrate --to <profile>              # 复制到 media-gen/<profile>")
             print(f"    {sys.argv[0]} migrate --to <profile> --delete-legacy --store auto   # 复制后删除旧条目（需闸门）")
-            print(f"    手工删除：med=1 时执行 security delete-generic-password -s {LEGACY_SERVICE} -a default")
+            print(f"    手工删除：MEDIA_ALLOW_CREDENTIAL_DELETE=1 后执行 "
+                  f"security delete-generic-password -s {LEGACY_SERVICE} -a default")
         return 0
 
     if args.command == "show":
