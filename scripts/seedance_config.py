@@ -9,8 +9,8 @@ Resolution order, first hit wins:
     key       SEEDANCE_API_KEY  →  LEGACY_API_KEY (legacy)
               →  OS credential store  →  config.json (opt-in, 0600)
               →  read-only import from an agent's auth file
-    base URL  SEEDANCE_BASE_URL  →  LEGACY_BASE_URL (legacy)
-              →  config.json  →  DEFAULT_BASE
+    base URL  SEEDANCE_BASE_URL  →  LEGACY_BASE_URL (legacy)  →  config.json
+              (required: there is no built-in default gateway)
 
 The agent-auth import exists so that an existing Pi / CodeBuddy install keeps
 working, but the value is never copied out of that file silently: ``status``
@@ -32,7 +32,8 @@ import urllib.error
 import urllib.request
 
 SERVICE = "seedance-gateway"
-DEFAULT_BASE = "https://gw.example.com/v1"
+# 不内置网关地址：地址属于部署方，首次使用必须由用户配置。
+DEFAULT_BASE = ""
 ENV_KEYS = ("SEEDANCE_API_KEY", "LEGACY_API_KEY")
 ENV_BASES = ("SEEDANCE_BASE_URL", "LEGACY_BASE_URL")
 DEFAULT_MODELS = ("doubao-seedance-2-5", "doubao-seedance-2-0-260128")
@@ -230,7 +231,17 @@ def resolve_base() -> tuple[str, str]:
     value = config.get("base_url")
     if isinstance(value, str) and value.strip():
         return value.strip().rstrip("/"), config_file()
-    return DEFAULT_BASE, "默认值"
+    return "", "未配置"
+
+
+def require_base() -> str:
+    base, _ = resolve_base()
+    if not base:
+        raise ConfigError(
+            "没有配置网关地址；运行 scripts/setup.sh new --base-url https://host/v1 "
+            "（或设置 SEEDANCE_BASE_URL）"
+        )
+    return base
 
 
 def resolve_model() -> tuple[str, str]:
@@ -256,8 +267,11 @@ def mask(secret: str) -> str:
 def doctor(timeout: int = 20) -> int:
     base, base_source = resolve_base()
     key, key_source = resolve_key()
-    print(f"地址        {base}  （来源：{base_source}）")
+    print(f"地址        {base or '未配置'}  （来源：{base_source}）")
     print(f"密钥        {mask(key) if key else '未配置'}  （来源：{key_source}）")
+    if not base:
+        print("结果        FAIL  没有网关地址；运行 scripts/setup.sh new --base-url https://host/v1")
+        return 1
     if not key:
         print("结果        FAIL  没有可用密钥；运行 scripts/setup.sh new")
         return 1
@@ -302,7 +316,7 @@ def cmd_status(_: argparse.Namespace) -> int:
     key, key_source = resolve_key()
     model, model_source = resolve_model()
     print(f"配置目录    {config_dir()}")
-    print(f"地址        {base}")
+    print(f"地址        {base or '未配置'}")
     print(f"地址来源    {base_source}")
     print(f"密钥        {mask(key) if key else '未配置'}")
     print(f"密钥来源    {key_source}")
@@ -311,7 +325,7 @@ def cmd_status(_: argparse.Namespace) -> int:
     if os.path.exists(config_file()):
         mode = oct(os.stat(config_file()).st_mode & 0o777)
         print(f"配置文件    {config_file()}  {mode}")
-    return 0 if key else 1
+    return 0 if key and base else 1
 
 
 def cmd_set(args: argparse.Namespace) -> int:
@@ -411,7 +425,7 @@ def cmd_get_key(_: argparse.Namespace) -> int:
 
 
 def cmd_get_base(_: argparse.Namespace) -> int:
-    print(resolve_base()[0])
+    print(require_base())
     return 0
 
 

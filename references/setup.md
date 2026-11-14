@@ -27,8 +27,11 @@ Key (`scripts/seedance_config.py get-key`):
 4. read-only import from `~/.pi/agent/auth.json` (`legacyprov.key`), `~/.codebuddy/models.json`,
    `~/.workbuddy/models.json` (first model whose `url` contains `example.com`)
 
-Base URL (`get-base-url`): `SEEDANCE_BASE_URL` → legacy `LEGACY_BASE_URL` → `config.json` →
-built-in default.
+Base URL (`get-base-url`): `SEEDANCE_BASE_URL` → legacy `LEGACY_BASE_URL` → `config.json`.
+
+There is **no built-in default gateway**: `get-base-url` fails with a pointer to `setup.sh` until one
+is configured. That is deliberate — the gateway belongs to whoever deploys the models, and guessing
+one would ship someone's endpoint as if it were universal.
 
 Model (`get-model`): `SEEDANCE_VIDEO_MODEL` → `config.json` → `doubao-seedance-2-5`.
 

@@ -33,8 +33,9 @@ The only entry point is this skill's scripts, which speak the gateway's Videos r
 
 ## Money and time
 
-- Every generation is billed as video tokens. Measured: 4 s / 854x480 ≈ 38 800 tokens,
-  10 s / 1280x720 ≈ 216 900 tokens. Wall clock 1.5–5 minutes per clip.
+- Every generation is billed as video tokens; the rate depends on the provider's price list, the
+  duration, and the resolution. A 480p draft costs a fraction of a 720p/1080p render, and duration
+  scales roughly linearly. Wall clock is minutes, not seconds (queueing plus generation).
 - Confirm duration and resolution before spending unless the user already stated both. Use
   `gen --dry-run` to show the request without creating a task.
 - Prefer one shot: `run` creates, polls, and downloads in a single call. Use `gen` + `wait` only
@@ -64,8 +65,7 @@ Options: `--model`, `--seconds` (`4..30`, or `-1` = model picks), `--size 1280x7
 
 - Report the downloaded file path first; `result.url` is a signed object-storage link that expires
   (24 h on the reference gateway), so it is not a deliverable on its own.
-- Include duration, pixel size, and token usage in the summary, e.g.
-  `10 s · 1280x720 · 216 900 tokens`.
+- Include duration, pixel size, and the token usage the gateway returns in the summary.
 - Keep provider internals, signed URLs, and keys out of committed files and public reports.
 
 ## Failure playbook

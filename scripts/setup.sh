@@ -112,10 +112,11 @@ panel() {
 do_write() {  # do_write new|modify
   local action="$1"
   printf '\n-- %s --\n' "$action"
-  printf '网关地址要指向 LiteLLM（或任何实现 OpenAI Videos 路由的服务），形如 https://host/v1\n' >&2
+  printf '网关地址必填：指向 LiteLLM（或任何实现 OpenAI Videos 路由的服务），形如 https://host/v1\n' >&2
   local base model key
   base="$BASE_URL"
-  [ -n "$base" ] || base=$(ask "网关地址" "$(current_base)")
+  [ -n "$base" ] || base=$(ask "网关地址（必填）" "$(current_base)")
+  [ -n "$base" ] || die "网关地址不能为空；可用 --base-url https://host/v1 指定"
   model="$MODEL"
   [ -n "$model" ] || model=$(ask "默认模型" "$(current_model)")
   key=""

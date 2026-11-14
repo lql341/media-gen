@@ -59,7 +59,7 @@ documentation:
 ```json
 {"object":"video","status":"completed","seconds":"10","size":"1280x720",
  "model":"<gateway-internal deployment id>",
- "usage":{"completion_tokens":216900,"total_tokens":216900,
+ "usage":{"completion_tokens":<tokens>,"total_tokens":<tokens>,
           "video_resolution":"720p","has_video_input":false},
  "result":{"url":"https://<object-storage>/...","last_frame_url":null,
            "duration":10.0,"width":null,"height":null,"format":"mp4"}}
@@ -69,18 +69,14 @@ documentation:
 - Pixel dimensions live in the top-level `size`; `result.width` / `result.height` were null on the
   reference gateway.
 - `seconds` is a string, `result.duration` is a float.
-- `result.url` is signed and expires (24 h on the reference gateway). Download with `content` when
-  you need a durable artifact; `last_frame_url` is what chain/extension workflows feed back.
+- `result.url` is a signed, expiring link. Download with `content` when you need a durable
+  artifact; `last_frame_url` is what chain/extension workflows feed back.
 
 ## Cost shape
 
-Billing is per video token, so cost scales with duration and resolution:
+Billing is per video token, so cost follows duration and output resolution. Ask the gateway operator
+for the current price list; this skill deliberately carries no rate table, because prices and
+promotions change and a stale number is worse than no number.
 
-| Request | Output | `completion_tokens` |
-| --- | --- | --- |
-| `seconds=4`, `resolution=480p` | 854x480 | 38 830 |
-| `seconds=5`, default size | model-chosen | varies |
-| `seconds=10`, `size=1280x720` | 1280x720 | 216 900 |
-
-Treat these as orders of magnitude for planning, not as a price list: rate cards live at the
-gateway, not in this skill.
+Practical rule: draft at the lowest resolution and shortest duration that answers the question, then
+render the keeper at the resolution you actually need.

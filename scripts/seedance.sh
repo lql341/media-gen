@@ -11,7 +11,7 @@
 #   429 No deployments available for selected model
 # 它们不能当 chat 模型用，也不能写进任何客户端的 models.json。
 #
-# 计费按视频 token 计（实测 10s / 720p ≈ 216900 completion_tokens），run 之前先想清楚。
+# 计费按视频 token 计（随分辨率、时长与提供商价格表变化），run 之前先想清楚。
 #
 # 配置（地址 + 密钥）不写在本文件里：见 scripts/seedance_config.py 与 scripts/setup.sh。
 set -euo pipefail
@@ -32,7 +32,7 @@ MODEL=""
 KEY=""
 resolve_config() {
   [ -n "$BASE" ] && return 0
-  BASE=$(cfg get-base-url) || die "读不到网关地址；运行 scripts/setup.sh new"
+  BASE=$(cfg get-base-url) || die "没有网关地址；运行 scripts/setup.sh new --base-url https://host/v1"
   MODEL=$(cfg get-model) || MODEL="doubao-seedance-2-5"
   KEY=$(cfg get-key) || die "没有可用密钥；运行 scripts/setup.sh new（或设置 SEEDANCE_API_KEY）"
 }
@@ -200,7 +200,7 @@ cmd_run() {
 
 usage() {
   cat <<'USAGE'
-通过 legacyprov 网关调用 Seedance 视频模型（doubao-seedance-2-5 / -2-0-260128）
+通过 LiteLLM 网关的 Videos 路由调用 Seedance 视频模型（doubao-seedance-2-5 / -2-0-260128）
 
 用法：seedance.sh <命令> [参数]
 
@@ -215,7 +215,7 @@ usage() {
                                      建任务 → 轮询 → 下载，stdout 只输出文件路径
 
 参数说明
-  --seconds  4..30，或 -1 让模型自选（默认由模型决定，实测 10）
+  --seconds  4..30，或 -1 让模型自选（具体默认值由模型决定）
   --size     如 1280x720；不支持的尺寸会提示改用 --ratio + --resolution
   --ratio/--resolution  火山原生比例（16:9、9:16、1:1…）与分辨率（480p/720p/1080p）
   --image    提供首帧图 = 图生视频（走 multipart 的 input_reference）

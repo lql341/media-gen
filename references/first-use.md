@@ -5,10 +5,11 @@ configuration, and neither may travel through chat.
 
 | What | Example | Where it comes from |
 | --- | --- | --- |
-| Gateway base URL | `https://gw.example.com/v1` | whoever operates the LiteLLM gateway (for the gateway: the model-service console) |
+| Gateway base URL | `https://your-litellm-host/v1` | whoever operates the LiteLLM gateway (for the gateway: the model-service console) |
 | API key | `sk-…` (a virtual key) | the same console, as a key scoped to the LLM routes |
 
-The gateway must implement **OpenAI Videos style routes** (`POST /videos`,
+There is no built-in default gateway, so this is a genuine first-time decision, not a confirmation
+prompt. The gateway must implement **OpenAI Videos style routes** (`POST /videos`,
 `GET /videos/<id>`, `GET /videos/<id>/content`). Any LiteLLM instance with a Seedance deployment
 does; a plain OpenAI-compatible chat endpoint does not.
 

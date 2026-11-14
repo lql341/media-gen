@@ -39,10 +39,11 @@ bash ~/src/seedance/scripts/install.sh --uninstall
 
 ## 配置
 
-只有两项，都在本机，都不该进聊天：
+只有两项，都在本机，都不该进聊天。**网关地址没有内置默认值**——网关归部署方所有，新机器必须先配，
+否则脚本直接拒绝运行：
 
 ```bash
-scripts/setup.sh new        # 依次问网关地址、API Key（输入不回显）
+scripts/setup.sh new        # 先问网关地址（必填），再问 API Key（输入不回显）
 scripts/setup.sh status     # 实际生效的地址/密钥来源（密钥脱敏）
 scripts/setup.sh doctor     # 只读：GET /models + 两个视频模型是否在列表
 scripts/setup.sh modify     # 换密钥或换地址
@@ -54,7 +55,7 @@ scripts/setup.sh reset [--all]
 | 值 | 顺序 |
 | --- | --- |
 | 密钥 | `SEEDANCE_API_KEY` → 系统凭据库（Keychain / `secret-tool`）→ `~/.config/seedance/config.json`（`--store file`，明文 0600）→ 只读导入 `~/.pi/agent/auth.json` / `~/.codebuddy/models.json` |
-| 地址 | `SEEDANCE_BASE_URL` → `config.json` → 内置默认值 |
+| 地址 | `SEEDANCE_BASE_URL` → `config.json` → **必填，无内置默认值** |
 | 模型 | `SEEDANCE_VIDEO_MODEL` → `config.json` → `doubao-seedance-2-5` |
 
 密钥通过 `curl --config` 走文件描述符传给 curl，不会出现在 `ps` 或 shell 历史里；`status` 只显示
@@ -80,14 +81,11 @@ scripts/setup.sh reset [--all]
 
 ## 成本
 
-按视频 token 计费，参考网关实测：
+按视频 token 计费，成本随时长与输出分辨率变化。本仓库**不附带价目表**：价格随网关而异，
+写死一个过期数字比不写更糟——向网关运营方要当前的价目。
 
-| 请求 | 输出 | tokens |
-| --- | --- | --- |
-| `-s 4 --resolution 480p` | 854x480 | 38 830 |
-| `-s 10 --size 1280x720` | 1280x720 | 216 900 |
-
-单片耗时 1.5–5 分钟。技能会要求 agent 在首次付费前确认时长与分辨率，只想看请求时用 `--dry-run`。
+技能强制的工作方式：先用最低分辨率 + 最短时长出草稿，确认构图后再用真正需要的分辨率出成品；
+生成是分钟级而不是秒级，所以 `--dry-run` 是不花钱确认请求的正确方式。
 
 ## 目录
 

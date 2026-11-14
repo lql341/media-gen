@@ -41,10 +41,12 @@ bash ~/src/seedance/scripts/install.sh --uninstall
 
 ## Configure
 
-Two settings, both local, neither of which should ever appear in chat:
+Two settings, both local, neither of which should ever appear in chat. **The base URL has no
+built-in default** — a fresh install refuses to run until you configure one, because the gateway
+belongs to whoever deploys it:
 
 ```bash
-scripts/setup.sh new        # asks for the gateway base URL, then the API key (hidden input)
+scripts/setup.sh new        # asks for the gateway base URL (required), then the API key (hidden input)
 scripts/setup.sh status     # which URL/key is in effect, and from where (key masked)
 scripts/setup.sh doctor     # read-only: GET /models + are both video models listed
 scripts/setup.sh modify     # rotate the key or change the URL
@@ -56,7 +58,7 @@ Resolution order, first hit wins:
 | Value | Order |
 | --- | --- |
 | key | `SEEDANCE_API_KEY` → OS credential store (Keychain / `secret-tool`) → `~/.config/seedance/config.json` (`--store file`, plaintext 0600) → read-only import from `~/.pi/agent/auth.json` / `~/.codebuddy/models.json` |
-| base URL | `SEEDANCE_BASE_URL` → `config.json` → built-in default |
+| base URL | `SEEDANCE_BASE_URL` → `config.json` → **required, no built-in default** |
 | model | `SEEDANCE_VIDEO_MODEL` → `config.json` → `doubao-seedance-2-5` |
 
 The key is passed to `curl` through `--config` on a file descriptor, so it never shows up in `ps`
@@ -83,15 +85,13 @@ must not be added to any client's `models.json`. Route shape and measured payloa
 
 ## Cost
 
-Billed per video token; measured on the reference gateway:
+Billed per video token, so cost follows duration and output resolution. This repo carries no rate
+table on purpose: prices change per gateway, and a stale number is worse than none — ask the gateway
+operator for the current price list.
 
-| Request | Output | tokens |
-| --- | --- | --- |
-| `-s 4 --resolution 480p` | 854x480 | 38 830 |
-| `-s 10 --size 1280x720` | 1280x720 | 216 900 |
-
-Wall clock 1.5–5 minutes per clip. The skill instructs the agent to confirm duration and resolution
-before the first paid run, and to use `--dry-run` when only the request matters.
+Practical rule the skill enforces: draft at the lowest resolution and shortest duration that answers
+the question, then render the keeper at the resolution you need. Generation takes minutes, not
+seconds, so `--dry-run` is the cheap way to check the request.
 
 ## Layout
 
