@@ -116,7 +116,7 @@ bash tests/run-all.sh     # 六套离线测试：registry 单测、六种协议 
 ```
 
 待验证 / 待开发清单见 [`ROADMAP.md`](ROADMAP.md)。完整能力矩阵见 [`CAPABILITIES.md`](CAPABILITIES.md)，真机验证记录（命令 + 花费）与**逐格验证矩阵**（已真机验证 / 仅 mock / 未实现）见
-[`docs/VERIFICATION.md`](docs/VERIFICATION.md)。非官方端点（`custom` 模板 / `command` 钩子）见 [`references/custom-endpoints.md`](references/custom-endpoints.md)；
+[`docs/VERIFICATION.md`](docs/VERIFICATION.md)；照着跑一遍的真机清单在 [`docs/RUNBOOK.md`](docs/RUNBOOK.md)（零成本在前，全套只需 1 次付费调用）。非官方端点（`custom` 模板 / `command` 钩子）见 [`references/custom-endpoints.md`](references/custom-endpoints.md)；
 交互向导与跨平台入口见 [`references/interactive.md`](references/interactive.md)；
 图形客户端（WorkBuddy / DSH / Claude Desktop / CodeBuddy）走 MCP（7 个工具，含语音合成/转写），见
 [`references/gui-clients.md`](references/gui-clients.md)。

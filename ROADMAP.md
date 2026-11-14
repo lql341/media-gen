@@ -67,6 +67,8 @@ mock 通过不等于对过真实厂商。
 
 ## 四、怎么用这张表
 
+按步骤复验：**[`docs/RUNBOOK.md`](docs/RUNBOOK.md)**（零成本探针在前，全套真机验证只需 1 次付费调用）。
+
 ```bash
 media.py doctor --matrix     # 当前端点：哪些格子可以真机打勾
 media.py doctor --gaps       # 缺哪一类 deployment

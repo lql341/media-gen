@@ -3,6 +3,8 @@
 What was actually executed, and what is still simulated. Re-run any row with the command shown.
 Deliberately no token/cost figures: the CLI prints the gateway's own `usage` per run.
 
+> 想从头复验一遍：按 [`RUNBOOK.md`](RUNBOOK.md) 的顺序跑（零成本在前，全套真机验证只需 1 次付费调用）。
+
 ## Live: calls that produced (or were meant to produce) media
 
 | # | Capability | Command | Result | Cost |

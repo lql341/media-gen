@@ -124,6 +124,7 @@ references/routing-video.md    video routes per protocol (poll + fetch, image-to
 references/audio.md            speech synthesis + transcription
 CAPABILITIES.md                the full capability matrix (operations × protocols × verification)
 docs/VERIFICATION.md           live record + verification matrix (what is proven vs mock-only)
+docs/RUNBOOK.md                ordered copy-paste checklist: zero-cost probes first, then one paid run
 references/providers.md        per-provider quirks + verification status
 references/custom-endpoints.md  custom templates + command hooks for in-house APIs
 references/interactive.md      wizard flows, cross-platform entry points, credential-store switch
