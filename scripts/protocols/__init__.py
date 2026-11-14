@@ -21,6 +21,7 @@ import json
 import mimetypes
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
@@ -192,10 +193,26 @@ class Protocol:
             raise MediaError(f"{method} {path} → {status}：{error_message(payload, raw)}")
         return payload
 
+    def _same_origin(self, url: str) -> bool:
+        """是否就是配置档端点本身（凭据只发给它）。
+
+        不能用字符串前缀：``https://gw.example.com.evil.net`` 也以
+        ``https://gw.example.com`` 开头，那样会把 Authorization 发给外站。
+        """
+        def parts(value: str):
+            try:
+                split = urllib.parse.urlsplit(value)
+                scheme = split.scheme.lower()
+                return scheme, (split.hostname or "").lower(), split.port or (443 if scheme == "https" else 80)
+            except ValueError:   # 端口不是数字之类：当作不同源
+                return None
+
+        here = parts(self.endpoint.base_url)
+        return here is not None and parts(url) == here
+
     def fetch(self, url: str) -> bytes:
         """Download an artifact URL. Never send our credentials to a foreign host."""
-        same_host = url.startswith(self.endpoint.base_url)
-        status, _, raw = self._request("GET", url, auth=same_host)
+        status, _, raw = self._request("GET", url, auth=self._same_origin(url))
         if status >= 400:
             raise MediaError(f"下载 {url} → {status}")
         return raw

@@ -510,7 +510,8 @@ def cmd_status(args) -> int:
 
 def cmd_wait(args) -> int:
     _, _, protocol = make_context(args)
-    ids = list(args.task_id)
+    # CLI 给的是 list；程序化调用（MCP server）可能给单个字符串，list("video_1") 会拆成字符
+    ids = [args.task_id] if isinstance(args.task_id, str) else list(args.task_id)
     if len(ids) == 1:
         state = wait_for(protocol, ids[0], args.timeout, args.interval)
         result = [_state_dict(state)]

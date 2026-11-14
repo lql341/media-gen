@@ -111,6 +111,11 @@ class McpServerTest(unittest.TestCase):
         unknown = self.call("media_nope", {})
         self.assertFalse(unknown["ok"])
 
+    def test_task_wait(self):
+        waited = self.call("media_task", {"action": "wait", "task_id": "video_1", "interval": 1})
+        self.assertTrue(waited["ok"], waited)
+        self.assertEqual(waited["result"]["status"], "completed")
+
     def test_dry_run_spends_nothing(self):
         out = self.call("media_video", {"prompt": "x", "model": "doubao-seedance-2-5", "dry_run": True})
         self.assertTrue(out["ok"])

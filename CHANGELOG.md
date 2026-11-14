@@ -14,6 +14,15 @@ Vendor names removed from code and history; agent-auth import made explicit.
   runtime so the script never matches its own source.
 - Git history rewritten again with `git filter-repo` so no commit contains the vendor name, the
   private gateway host, or a personal path.
+- **`MCP media_task wait` was unusable**: a single task id passed programmatically went through
+  `list(args.task_id)` and was split into characters, so every GUI-side wait failed. `cmd_wait` now
+  accepts a string or a list.
+- **Credentials follow the endpoint's origin, not a string prefix.** `fetch()` compares
+  scheme + host + port: `https://gw.example.com.evil.net/…` no longer matches `startswith(base_url)`
+  (it used to receive `Authorization`), and same-host URLs outside the base path (`/files/…`,
+  `/videos/<id>/content`) no longer lose it.
+- Regression tests for both: `test_mcp.py` (wait) and `test_protocols.py` (origin check); both fail
+  against the previous implementation.
 
 ## 0.11.0 - 2026-11-14
 

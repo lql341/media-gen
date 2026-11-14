@@ -570,6 +570,27 @@ class GatewayExtrasTest(unittest.TestCase):
             self.assertTrue(any(h.get("openai-organization") == "org_test" for h in server.state.headers))
             self.assertTrue(any("api-version=2024-10-21" in q for q in server.state.queries))
 
+    def test_fetch_auth_is_bound_to_the_host_not_a_string_prefix(self):
+        # 只比字符串前缀时，“https://gw.example.com.evil.net”也会带上 Authorization
+        protocol = load_protocol("openai")(
+            Endpoint(protocol="openai", base_url="https://gw.example.com/v1", key="k")
+        )
+        self.assertTrue(protocol._same_origin("https://gw.example.com/v1/videos/x/content"))
+        self.assertFalse(protocol._same_origin("https://gw.example.com.evil.net/v1/videos/x/content"))
+        self.assertFalse(protocol._same_origin("https://gw.example.com:8443/v1/videos/x/content"))
+
+    def test_fetch_sends_auth_on_the_profile_host_and_not_elsewhere(self):
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            self.assertEqual(protocol.fetch(server.url("/files/last.png")), PNG)
+            self.assertTrue(any("authorization" in h for h in server.state.headers))
+        with MockServer() as server:
+            ep = endpoint(server, "openai", "/v1")
+            ep.base_url = ep.base_url.replace(str(server.port), str(server.port + 1))
+            protocol = load_protocol("openai")(ep)
+            self.assertEqual(protocol.fetch(server.url("/files/last.png")), PNG)
+            self.assertFalse(any("authorization" in h for h in server.state.headers))
+
 
 class AzureTest(unittest.TestCase):
     def test_deployment_path_query_and_api_key(self):
