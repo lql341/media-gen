@@ -11,6 +11,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"; [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true' EXIT
 export HOME="$TMP/home"
 export XDG_CONFIG_HOME="$TMP/home/.config"
+export MEDIA_CREDENTIAL_STORE=none
 mkdir -p "$HOME"
 unset MEDIA_PROFILE MEDIA_PROTOCOL MEDIA_API_KEY MEDIA_API_KEY_DEFAULT 2>/dev/null || true
 

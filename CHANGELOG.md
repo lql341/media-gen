@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0 - 2026-11-14
+
+Interactive, cross-platform, and reachable from GUI clients.
+
+- **Wizard** (`scripts/wizard.py`, stdlib only): add / custom-template builder / modify / remove /
+  list / doctor / migrate / MCP snippet. Hidden key input via `getpass`, with a visible fallback when
+  stdin is piped so automation works. Same UX on macOS, Linux and Windows.
+- **`scripts/setup.ps1`**: PowerShell entry point forwarding to the same wizard; resolves `python3`,
+  `python`, `py -3`, or `$env:MEDIA_PYTHON`.
+- **MCP server** (`scripts/mcp_server.py`): stdio JSON-RPC exposing `media_profiles`, `media_models`,
+  `media_image`, `media_video`, `media_task` — the supported way for WorkBuddy / DSH Desktop /
+  Claude Desktop / CodeBuddy, which cannot install skills and must not treat this as a chat model.
+- **Credential-store control**: `MEDIA_CREDENTIAL_STORE=auto|file|none` (`MEDIA_NO_KEYCHAIN=1` alias),
+  per-process caching of store reads (one lookup per profile per run), and `MEDIA_DEBUG_STORE=1` to
+  print every access. Tests run with `none` and assert zero keyring operations.
+- Wizard falls back to the `0600` file when the keyring is unavailable or locked, instead of aborting.
+- Docs: `interactive.md`, `gui-clients.md`; setup/troubleshooting/SKILL/README updated.
+- Tests: +`test_wizard.sh` (piped answers, incl. custom template) and +`test_mcp.py` (initialize,
+  tools/list, image, video, task, unknown-method), both offline.
+
 ## 0.3.0 - 2026-11-14
 
 Non-official endpoints, plus a real configuration lifecycle.

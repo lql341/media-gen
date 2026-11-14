@@ -47,6 +47,15 @@ bash ~/src/media-gen/scripts/install.sh --codex  # 或 --claude / --copy / --uni
 
 ## 配置
 
+交互向导（macOS / Linux / Windows PowerShell 同一套界面）：
+
+```bash
+scripts/setup.sh          # macOS / Linux
+.\scripts\setup.ps1       # Windows PowerShell
+```
+
+也支持全参数化：
+
 ```bash
 # 新增 / 更新端点
 scripts/setup.sh add <name> --protocol <openai|ark|dashscope|minimax|custom|command> \
@@ -73,6 +82,10 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 密钥优先级：`MEDIA_API_KEY_<PROFILE>` → `MEDIA_API_KEY` → 系统凭据库 → 配置文件内明文
 （`--store file`，0600）→ agent auth 文件只读导入。**没有默认端点、没有默认模型**——都归部署方决定。
 
+凭据库只在真正需要时才访问：`MEDIA_CREDENTIAL_STORE=file|none` 可完全绕开，单进程内查询带缓存
+（一次 `list` 只查一遍），`MEDIA_DEBUG_STORE=1` 会把每次访问打到 stderr。测试全部以 `none` 运行并断言
+零次凭据库操作。
+
 ## 使用
 
 | 目的 | 命令 |
@@ -87,11 +100,14 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 ## 目录与测试
 
 ```bash
-bash tests/run-all.sh     # 四套离线测试：registry 单测、六种协议 mock、配置优先级与生命周期、CLI 端到端
+bash tests/run-all.sh     # 六套离线测试：registry 单测、六种协议 mock、配置优先级与生命周期、
+                          # 交互向导（管道驱动）、MCP server（stdio）、CLI 端到端；零凭据库访问
 ```
 
-非官方端点（`custom` 模板 / `command` 钩子）的写法与验证方法见
-[`references/custom-endpoints.md`](references/custom-endpoints.md)。
+非官方端点（`custom` 模板 / `command` 钩子）见 [`references/custom-endpoints.md`](references/custom-endpoints.md)；
+交互向导与跨平台入口见 [`references/interactive.md`](references/interactive.md)；
+图形客户端（WorkBuddy / DSH / Claude Desktop / CodeBuddy）走 MCP，见
+[`references/gui-clients.md`](references/gui-clients.md)。
 
 协议适配器是对着 `tests/mock_server.py`（按各家文档实现的本地 mock）跑的，**不联网、不要账号、不花钱**。
 仓库不配 CI（私有仓库 + Actions 分钟数不免费）。

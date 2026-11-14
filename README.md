@@ -49,6 +49,15 @@ Reopen the agent (or `/reload`), then `/skill:media-gen …` or just ask for an 
 
 ## Configure
 
+Interactive wizard (same on macOS, Linux and Windows PowerShell):
+
+```bash
+scripts/setup.sh          # macOS / Linux
+.\scripts\setup.ps1       # Windows PowerShell
+```
+
+Or drive it with flags:
+
 ```bash
 # add / update an endpoint
 scripts/setup.sh add <name> --protocol <openai|ark|dashscope|minimax|custom|command> \
@@ -76,6 +85,10 @@ Key resolution: `MEDIA_API_KEY_<PROFILE>` → `MEDIA_API_KEY` → OS credential 
 (`--store file`, 0600) → read-only import from an agent's auth file. Keys never enter argv, shell
 history, logs, or the repository. There is **no default endpoint and no default model**.
 
+The keyring is only touched when it is consulted: `MEDIA_CREDENTIAL_STORE=file|none` keeps it out of
+the loop, lookups are cached per process, and `MEDIA_DEBUG_STORE=1` prints each access. The test
+suite runs with `none` and asserts zero keyring operations.
+
 ## Use
 
 | Goal | Command |
@@ -97,6 +110,11 @@ references/routing-image.md    image routes per protocol
 references/routing-video.md    video routes per protocol (poll + fetch)
 references/providers.md        per-provider quirks + verification status
 references/custom-endpoints.md  custom templates + command hooks for in-house APIs
+references/interactive.md      wizard flows, cross-platform entry points, credential-store switch
+references/gui-clients.md      MCP server for WorkBuddy / DSH / Claude Desktop / CodeBuddy
+scripts/wizard.py              interactive setup (stdlib, getpass, Windows-safe)
+scripts/mcp_server.py          stdio MCP server: media_profiles/models/image/video/task
+scripts/setup.ps1              PowerShell entry point
 references/troubleshooting.md  full error table
 scripts/media.py               CLI: models / image / video / run / status / wait / download / doctor
 scripts/media_config.py        profiles + credentials (status/add/use/rm/migrate)
@@ -115,10 +133,11 @@ MIGRATION.md                   moving from the seedance-only skill
 bash tests/run-all.sh
 ```
 
-Four suites, all offline: registry unit tests, protocol adapters against a scripted mock server
+Six suites, all offline: registry unit tests, protocol adapters against a scripted mock server
 (create → poll → download, request bodies inspected), configuration/credential precedence in a
-temp `HOME`, and CLI end-to-end through the mock. No network, no account, no spend. There is no CI
-workflow on purpose.
+temp `HOME`, the interactive wizard (piped answers), the MCP server over stdio, and CLI end-to-end
+through the mock. No network, no account, no spend, **and no keyring access**
+(`MEDIA_CREDENTIAL_STORE=none`, asserted). There is no CI workflow on purpose.
 
 ## License
 

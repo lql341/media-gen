@@ -51,7 +51,8 @@ Never conclude that a model "does not exist" because one endpoint lacks it: ask 
 
 | Goal | Command |
 |---|---|
-| Configure | `setup.sh add <name> --protocol <p> --base-url <URL>` (adds or updates) |
+| Configure interactively | `setup.sh` / `setup.ps1` (wizard: add, custom template, modify, remove, MCP snippet) |
+| Configure by flags | `setup.sh add <name> --protocol <p> --base-url <URL>` (adds or updates) |
 | Inspect / verify | `setup.sh list|show|status|doctor` |
 | Change one thing | `setup.sh modify <name>` · `set-url` · `set-key` · `set-protocol` · `rename` |
 | Remove | `setup.sh rm <name> [--keep-key]` · `rm --all` |
@@ -82,6 +83,13 @@ validated locally before any request.
 | `command.status 失败（exit=…）` | the hook script failed | read its stderr (shown in the message); test the hook by hand with JSON on stdin |
 
 Full detail: `references/troubleshooting.md`; per-provider quirks: `references/providers.md`.
+
+## Graphical clients
+
+GUI clients (WorkBuddy, DSH Desktop, Claude Desktop) cannot install skills and cannot use this as a
+chat model. Attach `scripts/mcp_server.py` as an MCP server instead — five tools
+(`media_profiles`, `media_models`, `media_image`, `media_video`, `media_task`). See
+`references/gui-clients.md`; the wizard's menu item 8 prints a ready-to-paste snippet.
 
 ## Boundaries
 

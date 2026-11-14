@@ -39,6 +39,8 @@ import sys
 import urllib.error
 import urllib.request
 
+# 凭据库开关：auto（默认，用系统凭据库）/ file（只用 0600 文件）/ none（完全不碰凭据库）
+# MEDIA_CREDENTIAL_STORE=none 时本进程不会调用 security / secret-tool —— 测试与 CI 必须用它。
 SERVICE = "media-gen"
 LEGACY_SERVICE = "seedance-gateway"
 PROTOCOLS = ("openai", "ark", "dashscope", "minimax", "custom", "command")
@@ -238,12 +240,36 @@ def normalize_secret(value: str, label: str = "API Key") -> str:
     return value
 
 
+_STORE_CACHE: dict[tuple[str, str], str | None] = {}
+_STORE_CALLS: list[str] = []
+
+
+def credential_store_mode() -> str:
+    value = os.environ.get("MEDIA_CREDENTIAL_STORE", "auto").strip().lower()
+    if os.environ.get("MEDIA_NO_KEYCHAIN", "").strip() in ("1", "true", "yes"):
+        return "none"
+    return value if value in ("auto", "file", "none") else "auto"
+
+
 def secure_store_name() -> str | None:
+    if credential_store_mode() == "none":
+        return None
     if platform.system() == "Darwin" and shutil.which("security"):
         return "macOS Keychain"
     if shutil.which("secret-tool"):
         return "Secret Service"
     return None
+
+
+def store_call_log() -> list[str]:
+    """Every credential-store access this process made (for tests / diagnostics)."""
+    return list(_STORE_CALLS)
+
+
+def _debug_store(message: str) -> None:
+    _STORE_CALLS.append(message)
+    if os.environ.get("MEDIA_DEBUG_STORE", "").strip() in ("1", "true", "yes"):
+        print(f"store: {message}", file=sys.stderr)
 
 
 def _run(command: list[str], **options) -> subprocess.CompletedProcess:
@@ -254,7 +280,21 @@ def _run(command: list[str], **options) -> subprocess.CompletedProcess:
 
 
 def _read_store(service: str, account: str) -> str | None:
+    key = (service, account)
+    if key in _STORE_CACHE:
+        return _STORE_CACHE[key]
     provider = secure_store_name()
+    if provider is None:
+        _debug_store(f"skip {service}/{account}（MEDIA_CREDENTIAL_STORE={credential_store_mode()}）")
+        _STORE_CACHE[key] = None
+        return None
+    _debug_store(f"read {service}/{account} via {provider}")
+    value = _read_store_uncached(service, account, provider)
+    _STORE_CACHE[key] = value
+    return value
+
+
+def _read_store_uncached(service: str, account: str, provider: str) -> str | None:
     if provider == "macOS Keychain":
         command = ["security", "find-generic-password", "-s", service, "-a", account, "-w"]
     elif provider == "Secret Service":
@@ -273,6 +313,11 @@ def _read_store(service: str, account: str) -> str | None:
 
 
 def store_key(profile: str, key: str) -> str:
+    if credential_store_mode() == "none":
+        raise ConfigError(
+            "MEDIA_CREDENTIAL_STORE=none：本进程不会写系统凭据库；"
+            "改用环境变量 MEDIA_API_KEY 或 --store file"
+        )
     provider = secure_store_name()
     payload = json.dumps({"api_key": key}, separators=(",", ":"))
     if provider == "macOS Keychain":
@@ -296,6 +341,7 @@ def store_key(profile: str, key: str) -> str:
 
 
 def delete_key(profile: str) -> bool:
+    _STORE_CACHE.pop((SERVICE, profile), None)
     provider = secure_store_name()
     if provider == "macOS Keychain":
         command = ["security", "delete-generic-password", "-s", SERVICE, "-a", profile]

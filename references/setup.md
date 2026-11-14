@@ -82,6 +82,22 @@ python3 scripts/media.py models
 Nothing is written to disk in this mode. There is no Windows credential-store backend: use
 environment variables there.
 
+## Interactive wizard and the credential-store switch
+
+`scripts/setup.sh` (macOS/Linux) and `scripts/setup.ps1` (Windows) both run
+`scripts/wizard.py`; see `interactive.md` for the flows and `gui-clients.md` for MCP clients.
+
+| `MEDIA_CREDENTIAL_STORE` | Behaviour |
+| --- | --- |
+| `auto` (default) | OS credential store when available |
+| `file` | never touch the keyring; `0600` config file only |
+| `none` | never read or write the keyring; keys from `MEDIA_API_KEY[_<PROFILE>]` |
+
+`MEDIA_NO_KEYCHAIN=1` is an alias for `none`. Lookups are cached per process, so one run of
+`status`/`list`/`doctor` performs at most one store read per profile. `MEDIA_DEBUG_STORE=1` prints
+each access (`store: read media-gen/litellm via macOS Keychain`) so you can audit it. The test suite
+runs with `none` and asserts zero keyring operations.
+
 ## Security notes
 
 - The CLI sends `Authorization` from Python (never through argv or shell history), and only to the
@@ -89,3 +105,5 @@ environment variables there.
 - `media_config.py` never puts a key value in an exception message; pasted `export …` lines and
   whole `Authorization:` headers are rejected rather than stored.
 - `--store file` exists for machines without a keyring; it prints a warning and stays `0600`.
+- No command ever prompts for the keyring interactively: `security`/`secret-tool` are called
+  non-interactively and failures degrade to "no key" rather than a modal dialog.

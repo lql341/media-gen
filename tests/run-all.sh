@@ -10,6 +10,12 @@ echo
 echo "=== protocol 适配器（本地 mock 服务）"
 "$PY" "$HERE/test_protocols.py"
 echo
+echo "=== 交互向导（管道驱动）"
+bash "$HERE/test_wizard.sh"
+echo
+echo "=== MCP server（图形客户端通道）"
+"$PY" "$HERE/test_mcp.py"
+echo
 echo "=== 配置与凭据"
 bash "$HERE/test-config.sh"
 echo
