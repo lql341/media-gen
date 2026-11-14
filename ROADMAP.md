@@ -31,7 +31,7 @@ mock 通过不等于对过真实厂商。
 | --- | --- | --- |
 | Linux 真机 + `secret-tool` 钥匙环 | 用 shim 模拟通过 | 一台 Linux；`bash tests/run-all.sh` |
 | Windows / `setup.ps1` / 无钥匙环降级 | 仅 `platform.system()` 模拟 | 一台 Windows（PowerShell 5 或 7） |
-| Windows Credential Manager | 未实现 | 参考 `the-hpc-skill` 的 ctypes 实现 |
+| Windows Credential Manager | 未实现 | 可参考 Python 标准库 `ctypes` 调 `Advapi32` 的通用做法 |
 | MCP server 接图形客户端 | 仅 stdio JSON-RPC 单测 | WorkBuddy / DSH Desktop / Claude Desktop 实连 |
 
 ### 需要外部账号

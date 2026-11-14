@@ -21,7 +21,7 @@ Secrets never live in that file unless the user explicitly asks for it
 service ``media-gen``, account ``<profile>``. Environment variables always win:
 
     MEDIA_API_KEY / MEDIA_API_KEY_<PROFILE> / MEDIA_BASE_URL / MEDIA_PROFILE
-    (legacy: SEEDANCE_API_KEY, LEGACY_API_KEY, SEEDANCE_BASE_URL, LEGACY_BASE_URL)
+    (legacy: SEEDANCE_API_KEY, SEEDANCE_BASE_URL — kept for older installs)
 
 Legacy seedance installs keep working: the Keychain item ``seedance-gateway``,
 ``~/.config/seedance/config.json`` and the old env vars are read as fallbacks.
@@ -45,8 +45,8 @@ SERVICE = "media-gen"
 LEGACY_SERVICE = "seedance-gateway"
 PROTOCOLS = ("openai", "azure", "ark", "dashscope", "minimax", "custom", "command")
 
-ENV_KEY = ("MEDIA_API_KEY", "SEEDANCE_API_KEY", "LEGACY_API_KEY")
-ENV_BASE = ("MEDIA_BASE_URL", "SEEDANCE_BASE_URL", "LEGACY_BASE_URL")
+ENV_KEY = ("MEDIA_API_KEY", "SEEDANCE_API_KEY")
+ENV_BASE = ("MEDIA_BASE_URL", "SEEDANCE_BASE_URL")
 PROFILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$")
 ACCOUNT_RE = PROFILE_RE
 
@@ -300,7 +300,7 @@ def normalize_secret(value: str, label: str = "API Key") -> str:
         value = value[1:-1].strip()
     if not value:
         raise ConfigError(f"{label} 不能为空。")
-    if re.match(r"(?i)^(export\s|set\s|\$env:|MEDIA_|SEEDANCE_|LEGACY_|(?:api[_-]?key|token)\s*[:=])", value):
+    if re.match(r"(?i)^(export\s|set\s|\$env:|MEDIA_|SEEDANCE_|(?:api[_-]?key|token)\s*[:=])", value):
         raise ConfigError(f"{label} 收到了变量赋值或字段名；请只粘贴值本身。")
     if re.match(r"(?i)^authorization\s*:", value):
         raise ConfigError(f"{label} 收到了整行 Authorization 头；请只粘贴 Bearer 后面的值。")
@@ -464,20 +464,31 @@ def delete_key(profile: str, account: str | None = None) -> bool:
 
 
 def agent_auth_key() -> tuple[str, str] | None:
-    """Read-only fallback: reuse a key an agent already manages locally."""
+    """Read-only fallback: reuse a key an agent already manages locally.
+
+    Which provider to look for is a deployment detail, not a hardcoded vendor name:
+    set ``MEDIA_AGENT_AUTH_PROVIDER`` (e.g. the provider id used in that agent's
+    auth file) and, optionally, ``MEDIA_AGENT_AUTH_BASE_HOST`` to match a model
+    list entry by URL host. Without them the import is off.
+    """
+    provider = os.environ.get("MEDIA_AGENT_AUTH_PROVIDER", "").strip()
+    host = os.environ.get("MEDIA_AGENT_AUTH_BASE_HOST", "").strip()
+    if not provider and not host:
+        return None
     for pattern in ("~/.pi/agent/auth.json", "~/.codebuddy/models.json", "~/.workbuddy/models.json"):
         path = os.path.expanduser(pattern)
         data = read_json(path) if os.path.exists(path) else {}
         if not data:
             continue
-        if isinstance(data.get("legacyprov"), dict):
-            key = data["legacyprov"].get("key")
+        if provider and isinstance(data.get(provider), dict):
+            key = data[provider].get("key")
             if isinstance(key, str) and key:
-                return key, f"{path}:legacyprov"
-        models = data.get("models") if isinstance(data.get("models"), list) else data
-        for model in models or []:
-            if isinstance(model, dict) and "example.com" in str(model.get("url", "")) and model.get("apiKey"):
-                return str(model["apiKey"]), f"{path}:models[]"
+                return key, f"{path}:{provider}"
+        if host:
+            models = data.get("models") if isinstance(data.get("models"), list) else data
+            for model in models or []:
+                if isinstance(model, dict) and host in str(model.get("url", "")) and model.get("apiKey"):
+                    return str(model["apiKey"]), f"{path}:models[]"
     return None
 
 
@@ -681,16 +692,26 @@ def _manage(args) -> int:
     if args.command == "migrate":
         legacy = _legacy_profile()
         old_key = _read_store(LEGACY_SERVICE, "default")
+        # 密钥来源按优先级：旧凭据库条目 → agent auth 文件（需 MEDIA_AGENT_AUTH_PROVIDER/HOST）
+        from_agent = None
+        if not old_key:
+            from_agent = agent_auth_key()
+            if from_agent:
+                old_key = from_agent[0]
         if not legacy and not old_key:
-            found = agent_auth_key()
-            if not found:
-                print("没有可迁移的旧配置（既无 ~/.config/seedance/config.json，也无旧 Keychain 条目）")
-                return 1
-            legacy = {"protocol": "openai", "base_url": os.environ.get(ENV_BASE[1], "")}
-            old_key = found[0]
-            legacy_source = found[1]
+            print(
+                "没有可迁移的旧配置（既无旧的 seedance 配置文件，也无旧凭据库条目）。\n"
+                "  如果密钥在某个 agent 的 auth 文件里，先设置 MEDIA_AGENT_AUTH_PROVIDER（该文件里的 provider 名）\n"
+                "  或 MEDIA_AGENT_AUTH_BASE_HOST（models[] 里的 URL 域名片段）再重试。"
+            )
+            return 1
+        if legacy:
+            legacy_source = legacy_config_file()
+        elif from_agent:
+            legacy_source = from_agent[1]
+            legacy = {"protocol": "openai", "base_url": os.environ.get("MEDIA_BASE_URL", "").strip()}
         else:
-            legacy_source = legacy_config_file() if legacy else f"{secure_store_name()}（{LEGACY_SERVICE}）"
+            legacy_source = f"{secure_store_name()}（{LEGACY_SERVICE}）"
         if not legacy.get("base_url"):
             raise ConfigError("旧配置里没有 base_url；用 setup.sh add 手动配置")
         config = read_config()

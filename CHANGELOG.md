@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.11.1 - 2026-11-14
+
+Vendor names removed from code and history; agent-auth import made explicit.
+
+- Dropped `LEGACY_*` env aliases (only `MEDIA_*` and the older `SEEDANCE_*` are read now).
+- The read-only "import a key from an agent's auth file" fallback no longer matches a hardcoded vendor:
+  it is **off unless** `MEDIA_AGENT_AUTH_PROVIDER` (provider id in that file) or
+  `MEDIA_AGENT_AUTH_BASE_HOST` (URL fragment to match in `models[]`) is set.
+- `migrate` now also picks up a key from an agent auth file (previous behaviour when no legacy
+  keychain item existed) and says exactly which env var enables it.
+- `scripts/sanitize-check.sh` additionally flags the vendor identifier itself; the pattern is built at
+  runtime so the script never matches its own source.
+- Git history rewritten again with `git filter-repo` so no commit contains the vendor name, the
+  private gateway host, or a personal path.
+
 ## 0.11.0 - 2026-11-14
 
 Readiness for publishing: verification matrix command, roadmap, redaction gate.

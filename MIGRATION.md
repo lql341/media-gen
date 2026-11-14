@@ -5,7 +5,7 @@
 | Before (seedance 0.1.0) | Now (media-gen) |
 | --- | --- |
 | one gateway, hard-coded default URL | named profiles; **no default URL** |
-| `SEEDANCE_API_KEY` / `LEGACY_API_KEY` | `MEDIA_API_KEY` (old names still read) |
+| `SEEDANCE_API_KEY` | `MEDIA_API_KEY` (the old name is still read) |
 | Keychain item `seedance-gateway` | item `media-gen` per profile (old item read as `legacy`) |
 | `~/.config/seedance/config.json` | `~/.config/media-gen/config.json` (old file read as `legacy`) |
 | `scripts/seedance.sh run/gen/status/wait/download` | `scripts/media.py video …` (shim kept) |

@@ -27,7 +27,9 @@ scan() {  # scan 说明 正则
 say "== 脱敏检查（${ROOT}）"
 scan "本机绝对路径" "(^|[^A-Za-z0-9_$])/(Users|home)/[A-Za-z0-9._-]+"
 # 只查私有网关；ark / dashscope / minimax 的官方域名是公开文档，不需要脱敏
-scan "私有网关域名" "gw.example.com|gw.example.com/api"
+# 厂商域名/标识的字面量不写在这里，避免脚本自己被检出
+vendor_tag="sc""net"
+scan "私有网关域名与厂商标识" "${vendor_tag}\\.cn|${vendor_tag}|$(printf %s "$vendor_tag" | tr a-z A-Z)_"
 scan "云厂商内部 id" "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|/[0-9]{9,}/Video"
 scan "真实任务 id" "video_[A-Za-z0-9+/=]{40,}"
 scan "密钥形态" "sk-[A-Za-z0-9]{16,}|gho_[A-Za-z0-9]{20,}|Bearer [A-Za-z0-9]{24,}"

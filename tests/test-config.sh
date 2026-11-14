@@ -13,7 +13,8 @@ export XDG_CONFIG_HOME="$TMP/home/.config"
 mkdir -p "$HOME"
 export MEDIA_CREDENTIAL_STORE=none
 unset MEDIA_API_KEY MEDIA_BASE_URL MEDIA_PROFILE MEDIA_PROTOCOL \
-      MEDIA_API_KEY_DEFAULT MEDIA_API_KEY_LITELLM SEEDANCE_API_KEY LEGACY_API_KEY 2>/dev/null || true
+      MEDIA_API_KEY_DEFAULT MEDIA_API_KEY_LITELLM SEEDANCE_API_KEY \
+      MEDIA_AGENT_AUTH_PROVIDER MEDIA_AGENT_AUTH_BASE_HOST 2>/dev/null || true
 
 fail=0
 check() { if printf '%s' "$3" | grep -qF "$2"; then printf 'ok    %s\n' "$1"; else printf 'FAIL  %s\n      期望: %s\n      实际: %s\n' "$1" "$2" "$3"; fail=1; fi; }
@@ -61,13 +62,14 @@ rm -rf "$HOME/.config/media-gen"
 mkdir -p "$HOME/.config/seedance" "$HOME/.pi/agent"
 printf '{"base_url":"https://legacy.example/v1"}\n' >"$HOME/.config/seedance/config.json"
 printf '{"legacyprov":{"type":"api_key","key":"legacy-agent-key-99887766"}}\n' >"$HOME/.pi/agent/auth.json"
-out=$("$PY" "$CFG" status)
+out=$(MEDIA_AGENT_AUTH_PROVIDER=legacyprov "$PY" "$CFG" status || true)
 check "自动识别 legacy 档" "legacy" "$out"
 check "legacy 地址来自旧配置" "https://legacy.example/v1" "$out"
-check "legacy 密钥来自 agent auth" "legacy-agent-key-99887766" "$("$PY" "$CFG" get-key)"
+check "legacy 密钥来自 agent auth" "legacy-agent-key-99887766" \
+  "$(MEDIA_AGENT_AUTH_PROVIDER=legacyprov "$PY" "$CFG" get-key)"
 
 echo "== migrate"
-"$PY" "$CFG" migrate --name old --store file >/dev/null
+MEDIA_AGENT_AUTH_PROVIDER=legacyprov "$PY" "$CFG" migrate --name old --store file >/dev/null
 check "migrate 生成配置档" "old" "$("$PY" "$CFG" list)"
 check "migrate 保留地址" "https://legacy.example/v1" "$("$PY" "$CFG" get-base-url --profile old)"
 check "migrate 保留密钥" "legacy-agent-key-99887766" "$("$PY" "$CFG" get-key --profile old)"
