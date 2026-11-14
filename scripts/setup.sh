@@ -29,7 +29,7 @@ PY="${PYTHON:-python3}"
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 cfg() { "$PY" "$CONFIG" "$@"; }
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
 
 ask() {
   local prompt="$1" default="${2:-}" answer
