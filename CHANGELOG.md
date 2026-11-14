@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.0 - 2026-11-15
+
+MCP 通道补齐到与 CLI 同等的能力面（GUI 客户端读不到 SKILL.md，缺一个入参就是没法用）。
+
+- **新增 `media_speech` / `media_transcribe`**：`/audio/speech` 与 `/audio/transcriptions` 以前只有 CLI
+  能调，GUI 用户完全够不到。
+- **`media_image` 补 `mask`**：`/images/edits` 的遮罩参数之前没透传。
+- **`media_video` 补 `remix` / `extend` / `last_frame`**：同样的 CLI 能力，工具层缺失。
+- **`media_task {action:"download"}` 补 `last_frame`**。
+- **`--last-frame` 在 `--remix` / `--extend` 分支被静默忽略**（CLI 同样的问题）：尾帧保存抽成
+  `save_last_frame()`，三处（普通视频 / remix / download）共用，不再各写一份。
+- `media_models` 的 `kind` 枚举补上 `speech` / `transcription`。
+- 文档同步：`SKILL.md`、`CAPABILITIES.md`、`references/gui-clients.md`、两份 README 的“five tools”都改成 7 个。
+
 ## 0.11.3 - 2026-11-15
 
 三个真行为修复，都是“明明会出错却静默”的那种。

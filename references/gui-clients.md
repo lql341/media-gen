@@ -11,15 +11,17 @@ These clients configure chat models (`models.json`, provider tables). `media-gen
 endpoints' image/video routes; there is no chat deployment behind it. Adding it as a model would only
 produce connection errors.
 
-## One server, five tools
+## One server, seven tools
 
 | Tool | Purpose |
 | --- | --- |
 | `media_profiles` | which endpoints are configured (no secrets) |
 | `media_models` | what the endpoint can generate, with constraints |
-| `media_image` | text→image, returns the saved file path |
-| `media_video` | text/image→video: create, poll, download |
+| `media_image` | text→image (also `image` + `mask` for `/images/edits`), returns the saved file path |
+| `media_video` | text/image→video: create, poll, download; `remix` / `extend` / `last_frame` |
 | `media_task` | `status` / `wait` / `download` for an existing task |
+| `media_speech` | text→audio (`/audio/speech`), returns the saved file path |
+| `media_transcribe` | audio→text (`/audio/transcriptions`), returns the transcript |
 
 The server uses the same profiles, registry and credential resolution as the CLI, so configuring
 once with `setup.sh` covers every client. Set `MEDIA_PROFILE` in the server's environment (or pass

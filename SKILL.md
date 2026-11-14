@@ -102,8 +102,9 @@ Full detail: `references/troubleshooting.md`; per-provider quirks: `references/p
 ## Graphical clients
 
 GUI clients (WorkBuddy, DSH Desktop, Claude Desktop) cannot install skills and cannot use this as a
-chat model. Attach `scripts/mcp_server.py` as an MCP server instead — five tools
-(`media_profiles`, `media_models`, `media_image`, `media_video`, `media_task`). See
+chat model. Attach `scripts/mcp_server.py` as an MCP server instead — seven tools
+(`media_profiles`, `media_models`, `media_image`, `media_video`, `media_task`, `media_speech`,
+`media_transcribe`). See
 `references/gui-clients.md`; the wizard's menu item 8 prints a ready-to-paste snippet.
 
 ## Boundaries

@@ -205,6 +205,18 @@ def default_output(kind: str) -> str:
     return f"media-{stamp}.{'mp4' if kind == 'video' else 'png'}"
 
 
+def save_last_frame(protocol, state: "VideoState", target: str | None) -> None:
+    """把任务的尾帧写到 target；网关没给 last_frame_url 时只提示，不算失败。"""
+    if not target:
+        return
+    if not state.last_frame_url:
+        announce("该任务没有返回 last_frame_url，未保存尾帧（网关不支持时属正常）")
+        return
+    data = protocol.fetch(state.last_frame_url)
+    write_artifact(os.path.expanduser(target), data)
+    announce(f"尾帧已保存 {target}（{len(data)} 字节）")
+
+
 def out_path(value: str | None, kind: str) -> str:
     """-o 展开 ~（agent 常把 "~/x.png" 原样传进来），否则会建出一个名为 ~ 的目录。"""
     return os.path.expanduser(value) if value else default_output(kind)
@@ -407,6 +419,7 @@ def cmd_video(args) -> int:
         payload = protocol.video_fetch(task_id, state)
         out = out_path(args.out, "video")
         write_artifact(out, payload)
+        save_last_frame(protocol, state, getattr(args, "last_frame", None))
         record_task({"id": task_id, "kind": "video", "model": model, "profile": name,
                      "status": state.status, "seconds": state.seconds, "size": state.size,
                      "file": out, "url": state.url, "usage": state.usage})
@@ -440,12 +453,7 @@ def cmd_video(args) -> int:
     payload = protocol.video_fetch(task_id, state)
     out = out_path(args.out, "video")
     write_artifact(out, payload)
-    if getattr(args, "last_frame", None) and state.last_frame_url:
-        last = protocol.fetch(state.last_frame_url)
-        write_artifact(os.path.expanduser(args.last_frame), last)
-        announce(f"尾帧已保存 {args.last_frame}（{len(last)} 字节）")
-    elif getattr(args, "last_frame", None):
-        announce("该任务没有返回 last_frame_url，未保存尾帧")
+    save_last_frame(protocol, state, getattr(args, "last_frame", None))
     announce(
         "完成："
         + " · ".join(
@@ -577,14 +585,7 @@ def cmd_download(args) -> int:
     out = out_path(args.out, "video")
     write_artifact(out, payload)
     announce(f"{len(payload)} 字节")
-    last_frame = getattr(args, "last_frame", None)
-    if last_frame:
-        if state.last_frame_url:
-            data = protocol.fetch(state.last_frame_url)
-            write_artifact(os.path.expanduser(last_frame), data)
-            announce(f"尾帧已保存 {last_frame}（{len(data)} 字节）")
-        else:
-            announce("该任务没有返回 last_frame_url，未保存尾帧（网关不支持时属正常）")
+    save_last_frame(protocol, state, getattr(args, "last_frame", None))
     print(out)
     return 0
 

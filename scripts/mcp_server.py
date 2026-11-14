@@ -6,10 +6,12 @@ Claude Desktop, CodeBuddy — can still drive media generation by attaching this
 server. It exposes the same registry/profile/credential machinery as the CLI:
 
     media_profiles   list configured endpoints (no secrets)
-    media_models     what this endpoint can generate (image/video + constraints)
+    media_models     what this endpoint can generate (image/video/speech/transcription + constraints)
     media_image      text→image, returns the saved file path
-    media_video      text/image→video: create, poll, download
+    media_video      text/image→video: create, poll, download (also remix / extend)
     media_task       status | wait | download for an existing task
+    media_speech     text→audio (/audio/speech), returns the saved file path
+    media_transcribe audio→text (/audio/transcriptions), returns the transcript
 
 Register it (paths must be absolute):
 
@@ -105,7 +107,7 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "kind": {"type": "string", "enum": ["image", "video"]},
+                "kind": {"type": "string", "enum": ["image", "video", "speech", "transcription"]},
                 "profile": {"type": "string"},
             },
         },
@@ -120,6 +122,8 @@ TOOLS = [
                 "model": {"type": "string"},
                 "size": {"type": "string", "description": "e.g. 1024x1024"},
                 "n": {"type": "integer", "minimum": 1},
+                "image": {"type": "string", "description": "reference image for /images/edits"},
+                "mask": {"type": "string", "description": "mask image (only /images/edits)"},
                 "out": {"type": "string", "description": "output file path"},
                 "profile": {"type": "string"},
                 "dry_run": {"type": "boolean", "description": "show the request only, spend nothing"},
@@ -145,6 +149,9 @@ TOOLS = [
                 "out": {"type": "string"},
                 "profile": {"type": "string"},
                 "create_only": {"type": "boolean", "description": "return the task id instead of waiting"},
+                "remix": {"type": "string", "description": "task id to remix (POST /videos/<id>/remix)"},
+                "extend": {"type": "string", "description": "task id to extend (POST /videos/extensions)"},
+                "last_frame": {"type": "string", "description": "also save the last frame image here"},
                 "dry_run": {"type": "boolean"},
                 "param": {"type": "array", "items": {"type": "string"},
                           "description": "provider-specific parameters as key=value"},
@@ -161,11 +168,45 @@ TOOLS = [
                 "action": {"type": "string", "enum": ["status", "wait", "download"]},
                 "task_id": {"type": "string"},
                 "out": {"type": "string"},
+                "last_frame": {"type": "string", "description": "download: also save the last frame here"},
                 "profile": {"type": "string"},
                 "interval": {"type": "integer"},
                 "timeout": {"type": "integer"},
             },
             "required": ["action", "task_id"],
+        },
+    },
+    {
+        "name": "media_speech",
+        "description": "Text to speech (/audio/speech): returns the saved audio file path. Needs an endpoint with a speech deployment.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string"},
+                "model": {"type": "string"},
+                "voice": {"type": "string"},
+                "format": {"type": "string", "description": "mp3 / wav / opus …"},
+                "out": {"type": "string"},
+                "profile": {"type": "string"},
+                "dry_run": {"type": "boolean"},
+            },
+            "required": ["text"],
+        },
+    },
+    {
+        "name": "media_transcribe",
+        "description": "Speech to text (/audio/transcriptions): returns the transcript. Needs a transcription deployment.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file": {"type": "string", "description": "local audio file path"},
+                "model": {"type": "string"},
+                "language": {"type": "string", "description": "e.g. zh"},
+                "out": {"type": "string", "description": "write the transcript to this file (default: return it)"},
+                "profile": {"type": "string"},
+                "dry_run": {"type": "boolean"},
+            },
+            "required": ["file"],
         },
     },
 ]
@@ -210,6 +251,7 @@ def call_tool(name: str, arguments: dict) -> dict:
             size=arguments.get("size"),
             n=int(arguments.get("n") or 1),
             image=arguments.get("image"),
+            mask=arguments.get("mask"),
             out=arguments.get("out"),
             dry_run=bool(arguments.get("dry_run")),
             param=list(arguments.get("param") or []),
@@ -228,6 +270,9 @@ def call_tool(name: str, arguments: dict) -> dict:
             image=arguments.get("image"),
             out=arguments.get("out"),
             create_only=bool(arguments.get("create_only")),
+            remix=arguments.get("remix") or None,
+            extend=arguments.get("extend") or None,
+            last_frame=arguments.get("last_frame") or None,
             dry_run=bool(arguments.get("dry_run")),
             interval=int(arguments.get("interval") or cli.DEFAULT_INTERVAL),
             timeout=int(arguments.get("timeout") or cli.DEFAULT_TIMEOUT),
@@ -253,8 +298,33 @@ def call_tool(name: str, arguments: dict) -> dict:
                 ),
             )
         if action == "download":
-            return _capture(cli.cmd_download, _args(task_id=task_id, out=arguments.get("out"), profile=profile))
+            return _capture(cli.cmd_download, _args(task_id=task_id, out=arguments.get("out"),
+                                                    last_frame=arguments.get("last_frame") or None,
+                                                    profile=profile))
         return {"ok": False, "error": f"未知 action：{action}"}
+
+    if name == "media_speech":
+        args = _args(
+            text=arguments.get("text"),
+            model=arguments.get("model"),
+            voice=arguments.get("voice"),
+            format=arguments.get("format"),
+            out=arguments.get("out"),
+            dry_run=bool(arguments.get("dry_run")),
+            profile=arguments.get("profile") or None,
+        )
+        return _capture(cli.cmd_speech, args)
+
+    if name == "media_transcribe":
+        args = _args(
+            file=arguments.get("file"),
+            model=arguments.get("model"),
+            language=arguments.get("language"),
+            out=arguments.get("out"),
+            dry_run=bool(arguments.get("dry_run")),
+            profile=arguments.get("profile") or None,
+        )
+        return _capture(cli.cmd_transcribe, args)
 
     return {"ok": False, "error": f"未知工具：{name}"}
 

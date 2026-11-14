@@ -70,7 +70,7 @@ labelled `unknown` and still usable with an explicit subcommand.
 | Integration | How |
 | --- | --- |
 | Agent Skill | `SKILL.md` + `references/`; `/skill:media-gen` in Pi, `~/.agents/skills` (shared with Claude Code) |
-| MCP server | `scripts/mcp_server.py`: `media_profiles`, `media_models`, `media_image`, `media_video`, `media_task` for WorkBuddy / DSH Desktop / Claude Desktop / CodeBuddy |
+| MCP server | `scripts/mcp_server.py`: `media_profiles`, `media_models`, `media_image`, `media_video`, `media_task`, `media_speech`, `media_transcribe` for WorkBuddy / DSH Desktop / Claude Desktop / CodeBuddy |
 | Plain CLI | `scripts/media.py` for scripts, cron, CI |
 
 ## Diagnostics

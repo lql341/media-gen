@@ -127,7 +127,7 @@ references/custom-endpoints.md  custom templates + command hooks for in-house AP
 references/interactive.md      wizard flows, cross-platform entry points, credential-store switch
 references/gui-clients.md      MCP server for WorkBuddy / DSH / Claude Desktop / CodeBuddy
 scripts/wizard.py              interactive setup (stdlib, getpass, Windows-safe)
-scripts/mcp_server.py          stdio MCP server: media_profiles/models/image/video/task
+scripts/mcp_server.py          stdio MCP server: profiles/models/image/video/task/speech/transcribe
 scripts/setup.ps1              PowerShell entry point
 references/troubleshooting.md  full error table
 scripts/media.py               CLI: models / image / video / run / status / wait / download / doctor

@@ -80,7 +80,9 @@ class McpServerTest(unittest.TestCase):
         reply = self.rpc({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         names = [tool["name"] for tool in reply["result"]["tools"]]
         self.assertEqual(
-            names, ["media_profiles", "media_models", "media_image", "media_video", "media_task"]
+            names,
+            ["media_profiles", "media_models", "media_image", "media_video", "media_task",
+             "media_speech", "media_transcribe"],
         )
 
     def test_models_and_profiles(self):
@@ -97,6 +99,12 @@ class McpServerTest(unittest.TestCase):
         )
         self.assertTrue(image["ok"], image)
         self.assertTrue(os.path.getsize(image["result"]) >= len(PNG) - 1)
+        masked = self.call(
+            "media_image",
+            {"prompt": "make it blue", "model": "gpt-image-1", "image": os.path.join(self.tmp.name, "a.png"),
+             "mask": os.path.join(self.tmp.name, "a.png"), "out": os.path.join(self.tmp.name, "m.png")},
+        )
+        self.assertTrue(masked["ok"], masked)
         video = self.call(
             "media_video",
             {"prompt": "a cat", "model": "doubao-seedance-2-5", "seconds": 4,
@@ -123,6 +131,35 @@ class McpServerTest(unittest.TestCase):
         failed = self.call("media_video", {"prompt": "x"})
         self.assertFalse(failed["ok"])
         self.assertIn("--model", failed["error"])
+
+    def test_audio_tools(self):
+        speech = self.call(
+            "media_speech",
+            {"text": "hello", "model": "tts-1", "voice": "alloy",
+             "out": os.path.join(self.tmp.name, "a.mp3")},
+        )
+        self.assertTrue(speech["ok"], speech)
+        self.assertEqual(speech["result"], os.path.join(self.tmp.name, "a.mp3"))
+        self.assertTrue(os.path.getsize(speech["result"]) > 0)
+        audio = os.path.join(self.tmp.name, "in.mp3")
+        with open(audio, "wb") as handle:
+            handle.write(b"ID3AUDIO")
+        text = self.call("media_transcribe", {"file": audio, "model": "whisper-1", "language": "en"})
+        self.assertTrue(text["ok"], text)
+        self.assertEqual(text["result"], "hello from mock")
+
+    def test_video_remix_and_last_frame(self):
+        out = os.path.join(self.tmp.name, "remix.mp4")
+        last = os.path.join(self.tmp.name, "remix-last.png")
+        remix = self.call(
+            "media_video",
+            {"prompt": "make it night", "model": "doubao-seedance-2-5", "remix": "video_1",
+             "interval": 1, "out": out, "last_frame": last},
+        )
+        self.assertTrue(remix["ok"], remix)
+        self.assertEqual(remix["result"], out)
+        self.assertTrue(os.path.getsize(out) > 0)
+        self.assertTrue(os.path.getsize(last) > 0, "remix 分支不能忽略 last_frame")
 
     def test_dry_run_spends_nothing(self):
         out = self.call("media_video", {"prompt": "x", "model": "doubao-seedance-2-5", "dry_run": True})
