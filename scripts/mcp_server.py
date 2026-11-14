@@ -35,7 +35,16 @@ sys.path.insert(0, HERE)
 import media as cli  # noqa: E402
 import media_config as config  # noqa: E402
 
-SERVER_INFO = {"name": "media-gen", "version": "0.4.0"}
+def read_version() -> str:
+    """版本只以仓库根目录的 VERSION 为准，避免这里写死的常量再次过期。"""
+    try:
+        with open(os.path.join(os.path.dirname(HERE), "VERSION"), encoding="utf-8") as handle:
+            return handle.read().strip() or "unknown"
+    except OSError:
+        return "unknown"
+
+
+SERVER_INFO = {"name": "media-gen", "version": read_version()}
 PROTOCOL_VERSION = "2024-11-05"
 
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.2 - 2026-11-15
+
+MCP reported a version that stopped matching `VERSION` two releases ago.
+
+- `SERVER_INFO.version` is read from the `VERSION` file instead of a hardcoded `0.4.0`, so
+  `initialize` can no longer advertise a stale number.
+- `install.sh --copy` also copies `VERSION`; the installed skill (which is not the repo) reports the
+  same version as the checkout.
+- `tests/test_mcp.py` asserts `serverInfo.version == VERSION`, so the two cannot drift again.
+
 ## 0.11.1 - 2026-11-14
 
 Vendor names removed from code and history; agent-auth import made explicit.

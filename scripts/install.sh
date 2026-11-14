@@ -69,6 +69,7 @@ else
   cp "$SRC_DIR/SKILL.md" "$DST/SKILL.md"
   cp "$SRC_DIR"/references/*.md "$DST/references/"
   cp "$SRC_DIR"/scripts/*.py "$SRC_DIR"/scripts/*.sh "$SRC_DIR"/scripts/*.json "$DST/scripts/"
+  [ -f "$SRC_DIR/VERSION" ] && cp "$SRC_DIR/VERSION" "$DST/VERSION"
   [ -d "$SRC_DIR/scripts/protocols" ] && cp -r "$SRC_DIR/scripts/protocols" "$DST/scripts/"
   chmod +x "$DST"/scripts/*.sh "$DST"/scripts/*.py
   echo "==> 已复制（仓库改动后需重跑本脚本）"

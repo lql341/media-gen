@@ -75,6 +75,8 @@ class McpServerTest(unittest.TestCase):
         reply = self.rpc({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
         self.assertEqual(reply["result"]["serverInfo"]["name"], "media-gen")
         self.assertIn("tools", reply["result"]["capabilities"])
+        with open(os.path.join(ROOT, "VERSION"), encoding="utf-8") as handle:
+            self.assertEqual(reply["result"]["serverInfo"]["version"], handle.read().strip())
         reply = self.rpc({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         names = [tool["name"] for tool in reply["result"]["tools"]]
         self.assertEqual(
