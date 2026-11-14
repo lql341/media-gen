@@ -52,6 +52,13 @@ key's team allowlist confirms it: requesting `gpt-image-1`, `wan*`, `MiniMax-Hai
 | 17 | param planning | `media.py video … --param watermark=false --param seed=42 --dry-run` | plan shows `params: {watermark: false, seed: 42}` |
 | 18 | GET retry | one `doctor` run during a TLS handshake timeout | retried, then succeeded on the next invocation |
 
+## Live: two more zero-cost probes (0.10.x)
+
+| # | Check | Command | Observed |
+| --- | --- | --- | --- |
+| 19 | `/images/edits` route reachable | `media.py image -p … --model gpt-image-1 --image ref.png` | `POST /images/edits → 401 team not allowed` — multipart accepted, rejected on allowlist (not a format error), no charge |
+| 20 | `--param` really reaches the gateway | `media.py video … --param ratio=bogus_value` | `400 Unsupported ratio for this model` — passthrough proven without creating a task |
+
 ## Simulated (code path exercised, no vendor involved)
 
 | Capability | How it is covered |
@@ -69,3 +76,43 @@ key's team allowlist confirms it: requesting `gpt-image-1`, `wan*`, `MiniMax-Hai
 - A native Linux box (keyring integration for real; `tests/run-all.sh` runs there unchanged).
 - A Windows machine (`setup.ps1`, `%USERPROFILE%`, no-keyring fallback).
 - Vendor-native `ark` / `dashscope` / `minimax` endpoints (all mock so far).
+
+
+# Verification matrix (tick these when the environment allows)
+
+`L` = live against a real gateway · `M` = mock/unit only · `–` = not implemented
+
+| Capability | Code | Verified | Blocked by |
+| --- | --- | --- | --- |
+| text → video | L | ✅ 2 runs | — |
+| image → video (public URL, `ratio=adaptive`) | L | ✅ 1 run | — |
+| status / wait / wait (parallel) | L | ✅ | — |
+| download + `--last-frame` (absent branch) | L | ✅ | — |
+| `doctor`, `doctor --gaps`, `models`, `models --access` | L | ✅ | — |
+| `list` (gateway task list) | L | ✅ (gateway defect found) | gateway drops `model` |
+| `--param` passthrough | L | ✅ rejected-value probe | — |
+| local validation (duration / size) | L | ✅ | — |
+| GET retry | L | ✅ (transient TLS timeout) | — |
+| local ledger (`tasks`) | L | ✅ | — |
+| image generation (`/images/generations`) | M | ⬜ | no image deployment on this key |
+| image editing (`/images/edits`) | M | ⬜ (route reachability proven, 401) | same |
+| batch images (`-n N`) | M | ⬜ | same |
+| speech (`/audio/speech`) | M | ⬜ (401 allowlist) | no speech deployment |
+| transcription (`/audio/transcriptions`) | M | ⬜ (401 allowlist) | no transcription deployment |
+| remix / extend | M | ⬜ | would create a billable task |
+| `--create-only` | M | ⬜ | creates a billable task |
+| `--json` (image / video / list) | M | ⬜ | needs a successful call |
+| profile `--header` / `--query` | M | ⬜ | needs an endpoint that echoes them |
+| `azure` protocol | M | ⬜ | needs an Azure resource |
+| `ark` / `dashscope` / `minimax` native | M | ⬜ | needs those API keys |
+| `custom` / `command` protocols | M | ⬜ | needs the in-house endpoint |
+| MCP server with a GUI client | M | ⬜ | needs WorkBuddy / DSH Desktop |
+| Linux keyring (`secret-tool`) | M (simulated) | ⬜ | needs a Linux box |
+| Windows (`setup.ps1`, no keyring) | – (code only) | ⬜ | needs Windows |
+| `/videos/edits`, `/videos/characters`, `/images/variations` | – | — | not implemented (routes exist upstream) |
+| native vendor TTS/STT for ark/dashscope/minimax | – | — | deliberate; use `custom`/`command` |
+| parallel *generation* (not just waiting) | – | — | not implemented |
+| cost estimation | – | — | deliberate (no price tables) |
+
+Nothing in the `⬜` rows is guessed-wrong in code: each has either a mock suite or a documented
+refusal. The distinction matters — "implemented" ≠ "proven against the vendor".

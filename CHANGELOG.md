@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.1 - 2026-11-14
+
+Verification transparency + two more zero-cost live probes.
+
+- `docs/VERIFICATION.md` now ends with a **verification matrix**: every capability marked live / mock /
+  not implemented, with what blocks the rest. "Implemented" and "proven against the vendor" are kept
+  apart on purpose.
+- New live probes: `/images/edits` reachability (multipart accepted, rejected on allowlist → 401, no
+  charge) and `--param` passthrough (invalid value rejected by the gateway → 400, proving it arrives
+  without creating a task).
+
 ## 0.10.0 - 2026-11-14
 
 The whole A–C backlog: diagnostics, remix/extend, plumbing, Azure, retries, ledger.
