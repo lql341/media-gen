@@ -98,23 +98,33 @@ class CommandProtocol(Protocol):
 
     # ---------------------------------------------------------------- actions
 
-    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> ImageResult:
+    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> list[ImageResult]:
         payload = {"model": model, "prompt": prompt, "n": n}
         if size:
             payload["size"] = size
         if ref:
             payload["ref"] = ref
         result = self._json("image", payload)
-        encoded = result.get("b64") or result.get("b64_json")
-        if encoded:
-            try:
-                return ImageResult(data=base64.b64decode(encoded), suffix=".png")
-            except (ValueError, TypeError):
-                raise MediaError("command.image 返回的 b64 不是合法 base64") from None
-        url = result.get("url")
-        if url:
-            return ImageResult(data=b"", suffix=guess_suffix(str(url)), url=str(url))
-        raise MediaError("command.image 需要返回 {b64} 或 {url}")
+        # 单张：{b64} / {url}；多张：{images:[{b64|url}, …]}
+        entries = result.get("images")
+        entries = entries if isinstance(entries, list) and entries else [result]
+        images: list[ImageResult] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            encoded = entry.get("b64") or entry.get("b64_json")
+            if encoded:
+                try:
+                    images.append(ImageResult(data=base64.b64decode(encoded), suffix=".png"))
+                except (ValueError, TypeError):
+                    raise MediaError("command.image 返回的 b64 不是合法 base64") from None
+                continue
+            url = entry.get("url")
+            if url:
+                images.append(ImageResult(data=b"", suffix=guess_suffix(str(url)), url=str(url)))
+        if not images:
+            raise MediaError("command.image 需要返回 {b64}/{url}，或 {images:[{b64|url}, …]}")
+        return images
 
     def video_create(self, model, prompt, *, seconds, size, resolution, ratio, ref):
         payload = {"model": model, "prompt": prompt}

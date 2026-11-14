@@ -104,7 +104,7 @@ class CustomProtocol(Protocol):
 
     # ------------------------------------------------------------------ image
 
-    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> ImageResult:
+    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> list[ImageResult]:
         config = self.spec.get("image")
         if not isinstance(config, dict):
             raise MediaError("该 custom 配置没有 image 段")
@@ -118,16 +118,29 @@ class CustomProtocol(Protocol):
         response = config.get("response") or {}
         mode = str(response.get("mode", "b64"))
         path = response.get("path")
+        item_field = response.get("item")
+        data = _dig(payload, path) if path else payload.get(mode)
+        # 列表形式：path 指向数组，item 指向数组元素的字段（可选）
+        if isinstance(data, list):
+            if item_field:
+                data = [_dig(entry, item_field) if isinstance(entry, dict) else entry for entry in data]
+            values = [value for value in data if isinstance(value, str) and value]
+        elif isinstance(data, str) and data:
+            values = [data]
+        else:
+            values = []
+        if not values:
+            raise MediaError(f"custom image: 在 {path or mode} 找不到图片数据（mode={mode}）")
         if mode == "b64":
-            data = _dig(payload, path) if path else payload.get("b64")
-            if not isinstance(data, str) or not data:
-                raise MediaError(f"custom image: 在 {path or 'b64'} 找不到 base64 数据")
-            return ImageResult(data=base64.b64decode(data), suffix=".png")
+            images: list[ImageResult] = []
+            for value in values:
+                try:
+                    images.append(ImageResult(data=base64.b64decode(value), suffix=".png"))
+                except (ValueError, TypeError):
+                    raise MediaError("custom image: base64 解码失败") from None
+            return images
         if mode == "url":
-            data = _dig(payload, path) if path else payload.get("url")
-            if not isinstance(data, str) or not data:
-                raise MediaError(f"custom image: 在 {path or 'url'} 找不到图片地址")
-            return ImageResult(data=b"", suffix=guess_suffix(data), url=data)
+            return [ImageResult(data=b"", suffix=guess_suffix(value), url=value) for value in values]
         raise MediaError(f"custom image.response.mode={mode} 不受支持（b64 / url）")
 
     # ------------------------------------------------------------------ video

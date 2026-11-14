@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0 - 2026-11-14
+
+Batch images are no longer truncated to the first result.
+
+- Every protocol returns a **list** of images: `openai`/`ark` (`data[]`), `dashscope` (`results[]`),
+  `minimax` (`image_base64[]` / `image_urls[]`), `custom` (a list path with optional `item` selector),
+  `command` (single `{b64|url}` or `{images:[…]}`).
+- `media.py image -n N` saves all of them: single result keeps `out.png`, several become
+  `out-1.png`, `out-2.png`, …; every path is printed on stdout.
+- MCP `media_image` returns an array when more than one image was produced.
+- Tests: batch assertions in the protocol suite (openai 3 images, custom list template, command
+  `images` list) and in the CLI suite (three files on disk, naming, no stray un-numbered file).
+
 ## 0.5.0 - 2026-11-14
 
 Multiple accounts per endpoint, safe for concurrent sessions.

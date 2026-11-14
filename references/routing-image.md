@@ -17,6 +17,11 @@ Both response shapes are handled: base64 is decoded, URLs are downloaded (withou
 key to the artifact host). `--size` is formatted as `WxH`; `-n` is passed through only when the
 registry marks the model as supporting `n>1`.
 
+**Batches**: when the response carries several images (`data[]`, `results[]`, `image_base64[]`, a
+template list, or `{images:[…]}` from a `command` hook), every image is saved:
+`out.png` for a single result, `out-1.png`, `out-2.png`, … for several, and each path is printed on
+stdout (the MCP tool returns an array). Nothing is silently dropped.
+
 Reference images (editing) live on a different route (`/images/edits`, multipart). The adapter
 refuses `--image` with a pointer instead of silently ignoring it.
 

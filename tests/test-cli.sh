@@ -72,6 +72,15 @@ check "b64 落盘" "$TMP/a.png" "$("$PY" "$CLI" image -p "a cat" --model gpt-ima
 check "url 落盘" "$TMP/b.png" "$("$PY" "$CLI" image -p "a cat" --model url-image -o "$TMP/b.png" 2>/dev/null)"
 [ -s "$TMP/b.png" ] && echo "ok    url 文件非空" || { echo "FAIL  url 文件为空"; fail=1; }
 
+echo "== 批量出图（n>1 全部落盘）"
+out=$("$PY" "$CLI" image -p "a cat" --model batch-image --size 512x512 -n 3 -o "$TMP/batch.png" 2>/dev/null)
+check "写出 3 个文件" "3" "$(printf '%s\n' "$out" | wc -l | tr -d ' ')"
+check "命名带序号" "$TMP/batch-2.png" "$(printf '%s\n' "$out" | sed -n 2p)"
+[ -s "$TMP/batch-1.png" ] && [ -s "$TMP/batch-3.png" ] && echo "ok    多张文件均非空" || { echo "FAIL  批量文件为空"; fail=1; }
+if [ -e "$TMP/batch.png" ]; then echo "FAIL  单张路径不应与批量混用"; fail=1; else echo "ok    未写出无序号文件"; fi
+out=$("$PY" "$CLI" image -p "a cat" --model gpt-image-1 -o "$TMP/one.png" 2>/dev/null)
+check "单张保持原路径" "$TMP/one.png" "$out"
+
 echo "== 视频全流程"
 out=$("$PY" "$CLI" video -p "a cat" --model doubao-seedance-2-5 -s 5 --interval 0 -o "$TMP/v.mp4" 2>"$TMP/v.log")
 check "run 打印路径" "$TMP/v.mp4" "$out"

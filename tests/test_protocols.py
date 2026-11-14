@@ -30,7 +30,7 @@ class OpenAITest(unittest.TestCase):
         with MockServer() as server:
             protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
             result = protocol.image("gpt-image-1", "a cat", size="1024x1024", n=1, ref=None)
-            self.assertEqual(result.data, PNG)
+            self.assertEqual(result[0].data, PNG)
             body = [call for call in server.state.calls if call[1] == "/v1/images/generations"][0][2]
             self.assertEqual(body["size"], "1024x1024")
             self.assertEqual(body["response_format"], "b64_json")
@@ -39,9 +39,19 @@ class OpenAITest(unittest.TestCase):
         with MockServer() as server:
             protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
             result = protocol.image("url-image", "a cat", size=None, n=1, ref=None)
-            self.assertEqual(result.data, b"")
-            self.assertTrue(result.url.endswith("/files/openai.png"))
-            self.assertEqual(protocol.fetch(result.url), PNG)
+            self.assertEqual(result[0].data, b"")
+            self.assertTrue(result[0].url.endswith("/files/openai.png"))
+            self.assertEqual(protocol.fetch(result[0].url), PNG)
+
+    def test_image_batch_returns_all(self):
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            results = protocol.image("batch-image", "a cat", size=None, n=3, ref=None)
+            self.assertEqual(len(results), 3)
+            self.assertEqual(results[0].data, PNG)
+            self.assertTrue(results[1].url.endswith("/files/openai.png"))
+            body = [call for call in server.state.calls if call[1] == "/v1/images/generations"][0][2]
+            self.assertEqual(body["n"], 3)
 
     def test_video_create_poll_download(self):
         with MockServer() as server:
@@ -92,7 +102,7 @@ class ArkTest(unittest.TestCase):
     def test_image(self):
         with MockServer() as server:
             protocol = load_protocol("ark")(endpoint(server, "ark", "/api/v3"))
-            self.assertEqual(protocol.image("doubao-seedream-4-0", "a cat", size="1024x1024", n=1, ref=None).data, PNG)
+            self.assertEqual(protocol.image("doubao-seedream-4-0", "a cat", size="1024x1024", n=1, ref=None)[0].data, PNG)
 
     def test_video_body_and_download(self):
         with MockServer() as server:
@@ -116,8 +126,8 @@ class DashScopeTest(unittest.TestCase):
         with MockServer() as server:
             protocol = load_protocol("dashscope")(endpoint(server, "dashscope", "/api/v1"))
             result = protocol.image("wan2.5-t2i-preview", "a cat", size="1024*1024", n=1, ref=None)
-            self.assertTrue(result.url.endswith("/files/dash.png"))
-            self.assertEqual(protocol.fetch(result.url), PNG)
+            self.assertTrue(result[0].url.endswith("/files/dash.png"))
+            self.assertEqual(protocol.fetch(result[0].url), PNG)
             body = [
                 call for call in server.state.calls
                 if call[1] == "/api/v1/services/aigc/text2image/image-synthesis"
@@ -156,7 +166,7 @@ class MinimaxTest(unittest.TestCase):
     def test_image(self):
         with MockServer() as server:
             protocol = load_protocol("minimax")(endpoint(server, "minimax", "/v1"))
-            self.assertEqual(protocol.image("image-01", "a cat", size="1024x1024", n=1, ref=None).data, PNG)
+            self.assertEqual(protocol.image("image-01", "a cat", size="1024x1024", n=1, ref=None)[0].data, PNG)
             body = [call for call in server.state.calls if call[1] == "/v1/image_generation"][0][2]
             self.assertEqual((body["width"], body["height"]), (1024, 1024))
 
@@ -208,7 +218,7 @@ class CustomProtocolTest(unittest.TestCase):
                 endpoint(server, "custom", "/"), CUSTOM_SPEC
             )
             result = protocol.image("any-model", "a cat", size="800x600", n=1, ref=None)
-            self.assertEqual(result.data, PNG)
+            self.assertEqual(result[0].data, PNG)
             body = [call for call in server.state.calls if call[1] == "/custom/t2i"][0][2]
             self.assertEqual(body, {"model": "any-model", "prompt": "a cat", "size": "800x600"})
 
@@ -227,6 +237,19 @@ class CustomProtocolTest(unittest.TestCase):
             self.assertEqual(state.seconds, "4")
             self.assertEqual(state.size, "640x360")
             self.assertEqual(protocol.video_fetch(task, state), MP4)
+
+    def test_image_list_template(self):
+        spec = {
+            "image": {
+                "method": "POST", "path": "/custom/batch", "body": {"prompt": "{prompt}"},
+                "response": {"mode": "url", "path": "data.images", "item": "url"},
+            }
+        }
+        with MockServer() as server:
+            protocol = load_protocol("custom")(endpoint(server, "custom", "/"), spec)
+            results = protocol.image("m", "p", size=None, n=2, ref=None)
+            self.assertEqual(len(results), 2)
+            self.assertTrue(results[0].url.endswith("/files/a.png"))
 
     def test_missing_section_is_explained(self):
         with MockServer() as server:
@@ -262,13 +285,30 @@ class CommandProtocolTest(unittest.TestCase):
                                 "status": f"{hook} status", "fetch": f"{hook} fetch"}}
             server = MockServer()
             protocol = load_protocol("command")(endpoint(server, "command", "/"), spec)
-            self.assertEqual(protocol.image("m", "p", size=None, n=1, ref=None).data, b"PNGDATA")
+            self.assertEqual(protocol.image("m", "p", size=None, n=1, ref=None)[0].data, b"PNGDATA")
             task = protocol.video_create("m", "p", seconds=4, size=None, resolution=None, ratio=None, ref=None)
             self.assertEqual(task, "t-1")
             state = protocol.video_status(task)
             self.assertTrue(state.done)
             self.assertEqual(state.seconds, "4")
             self.assertEqual(protocol.video_fetch(task, state), b"MP4DATA")
+
+    def test_command_images_list(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script = os.path.join(tmpdir, "multi.sh")
+            with open(script, "w", encoding="utf-8") as handle:
+                handle.write(
+                    "#!/usr/bin/env bash\nset -eu\n"
+                    "printf '{\"images\": [{\"b64\": \"UE5HREFUQQ==\"}, {\"url\": \"http://127.0.0.1:9/x.png\"}]}'\n"
+                )
+            os.chmod(script, 0o755)
+            server = MockServer()
+            protocol = load_protocol("command")(endpoint(server, "command", "/"), {"command": {"image": script}})
+            results = protocol.image("m", "p", size=None, n=2, ref=None)
+            self.assertEqual(len(results), 2)
+            self.assertEqual(results[0].data, b"PNGDATA")
 
     def test_failure_carries_stderr(self):
         import tempfile

@@ -95,7 +95,7 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 | 目的 | 命令 |
 | --- | --- |
 | 看能生成什么 | `media.py models [--kind image|video]` |
-| 图片 | `media.py image -p "<提示词>" --model M [--size 1024x1024] [-n N] [-o out.png]` |
+| 图片 | `media.py image -p "<提示词>" --model M [--size 1024x1024] [-n N] [-o out.png]`（`n>1` 写成 `out-1.png`、`out-2.png`…） |
 | 视频 | `media.py video -p "<提示词>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image 首帧图] [-o out.mp4]` |
 | 自动判种类 | `media.py run --model M …` |
 | 换账户 | `media.py --profile <name>@<alias>` / `--account <alias>` / `MEDIA_ACCOUNT` |

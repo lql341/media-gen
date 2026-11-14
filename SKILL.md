@@ -63,7 +63,7 @@ Never conclude that a model "does not exist" because one endpoint lacks it: ask 
 | Concurrent sessions | `MEDIA_PROFILE=<name>@<alias>` per process; accounts never fall back to the default account's key |
 | Move configuration | `setup.sh export` / `import <file>` (no secrets) · `migrate` (from seedance) |
 | What can this endpoint do? | `media.py models [--kind image|video] [--json]` |
-| Text to image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` |
+| Text to image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` (`n>1` → `out-1.png`, `out-2.png`, …) |
 | Text/image to video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [-o out.mp4]` |
 | Either, auto-detected | `media.py run --model M …` |
 | Task status / wait / fetch | `media.py status <id>` · `wait <id>` · `download <id> out.mp4` |

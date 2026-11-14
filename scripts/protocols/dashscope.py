@@ -44,7 +44,7 @@ class DashScopeProtocol(Protocol):
 
     # ------------------------------------------------------------- images
 
-    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> ImageResult:
+    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> list[ImageResult]:
         parameters: dict = {"n": n}
         if size:
             parameters["size"] = size
@@ -59,10 +59,14 @@ class DashScopeProtocol(Protocol):
         results = output.get("results") or []
         if not results:
             raise MediaError(f"DashScope 图片任务 {task_id} 没有返回结果（status={state}）")
-        url = results[0].get("url")
-        if not url:
+        images: list[ImageResult] = []
+        for entry in results:
+            url = entry.get("url") if isinstance(entry, dict) else None
+            if url:
+                images.append(ImageResult(data=b"", suffix=guess_suffix(str(url)), url=str(url)))
+        if not images:
             raise MediaError(f"DashScope 图片结果没有 url：{json.dumps(results[0])[:200]}")
-        return ImageResult(data=b"", suffix=guess_suffix(url), url=str(url))
+        return images
 
     # ------------------------------------------------------------- videos
 

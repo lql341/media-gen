@@ -99,7 +99,7 @@ suite runs with `none` and asserts zero keyring operations.
 | --- | --- |
 | discover | `media.py models [--kind image|video] [--json]` |
 | pick an account | `media.py --profile <name>@<alias> …` or `--account <alias>` / `MEDIA_ACCOUNT` |
-| image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` |
+| image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` (batch → `out-1.png`, `out-2.png`, …) |
 | video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [-o out.mp4]` |
 | either | `media.py run --model M …` (kind from the registry) |
 | tasks | `media.py status <id>` · `wait <id>` · `download <id> out.mp4` · `--create-only` |

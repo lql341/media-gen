@@ -18,7 +18,7 @@ from . import ImageResult, MediaError, Protocol, VideoState, data_uri, error_mes
 class ArkProtocol(Protocol):
     name = "ark"
 
-    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> ImageResult:
+    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> list[ImageResult]:
         body: dict = {"model": model, "prompt": prompt, "response_format": "b64_json"}
         if size:
             body["size"] = size
@@ -98,18 +98,24 @@ def _as_text(value) -> str | None:
     return str(value)
 
 
-def _decode_image(payload: dict) -> ImageResult:
+def _decode_image(payload: dict) -> list[ImageResult]:
     data = payload.get("data")
     if not isinstance(data, list) or not data:
         raise MediaError(f"Ark 图片响应里没有 data：{json.dumps(payload)[:300]}")
-    first = data[0] if isinstance(data[0], dict) else {}
-    encoded = first.get("b64_json")
-    if encoded:
-        try:
-            return ImageResult(data=base64.b64decode(encoded), suffix=".png")
-        except (ValueError, TypeError):
-            raise MediaError("Ark 图片响应里的 b64_json 不是合法 base64") from None
-    url = first.get("url")
-    if url:
-        return ImageResult(data=b"", suffix=guess_suffix(url), url=str(url))
-    raise MediaError(f"Ark 图片响应既没有 b64_json 也没有 url：{json.dumps(payload)[:300]}")
+    results: list[ImageResult] = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+        encoded = entry.get("b64_json")
+        if encoded:
+            try:
+                results.append(ImageResult(data=base64.b64decode(encoded), suffix=".png"))
+            except (ValueError, TypeError):
+                raise MediaError("Ark 图片响应里的 b64_json 不是合法 base64") from None
+            continue
+        url = entry.get("url")
+        if url:
+            results.append(ImageResult(data=b"", suffix=guess_suffix(url), url=str(url)))
+    if not results:
+        raise MediaError(f"Ark 图片响应既没有 b64_json 也没有 url：{json.dumps(payload)[:300]}")
+    return results

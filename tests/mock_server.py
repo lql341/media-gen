@@ -172,6 +172,12 @@ def make_handler(state: State):
                 model = str(body.get("model", ""))
                 if model == "url-image":
                     return self._json(200, {"data": [{"url": self._base() + "/files/openai.png"}]})
+                if model == "batch-image":
+                    return self._json(200, {"data": [
+                        {"b64_json": B64_PNG},
+                        {"url": self._base() + "/files/openai.png"},
+                        {"b64_json": B64_PNG},
+                    ]})
                 return self._json(200, {"data": [{"b64_json": B64_PNG}]})
             if path in ("/v1/videos", "/videos"):
                 return self._json(200, {"id": "video_1", "object": "video", "status": "queued"})
@@ -187,6 +193,11 @@ def make_handler(state: State):
                 return self._json(200, {"task_id": "m1", "base_resp": {"status_code": 0, "status_msg": "ok"}})
             if path == "/custom/t2i":
                 return self._json(200, {"data": {"image": B64_PNG}})
+            if path == "/custom/batch":
+                return self._json(200, {"data": {"images": [
+                    {"url": self._base() + "/files/a.png"},
+                    {"url": self._base() + "/files/b.png"},
+                ]}})
             if path == "/custom/tasks":
                 return self._json(200, {"task": {"id": "c1"}})
             if path == "/v1/image_generation":

@@ -33,7 +33,7 @@ class MinimaxProtocol(Protocol):
 
     # ------------------------------------------------------------- images
 
-    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> ImageResult:
+    def image(self, model: str, prompt: str, *, size: str | None, n: int, ref: str | None) -> list[ImageResult]:
         body: dict = {"model": model, "prompt": prompt, "n": n, "response_format": "base64"}
         if size:
             if "x" in size.lower() or "*" in size:
@@ -48,15 +48,18 @@ class MinimaxProtocol(Protocol):
             raise MediaError(f"POST /image_generation → {status}：{_text(payload, raw)}")
         self._check(payload, "MiniMax 图片生成")
         data = payload.get("data") or {}
-        images = data.get("image_base64") or []
-        if images:
-            try:
-                return ImageResult(data=base64.b64decode(images[0]), suffix=".jpeg")
-            except (ValueError, TypeError):
-                raise MediaError("MiniMax 返回的 image_base64 不是合法 base64") from None
+        encoded_items = data.get("image_base64") or []
+        if encoded_items:
+            images: list[ImageResult] = []
+            for encoded in encoded_items:
+                try:
+                    images.append(ImageResult(data=base64.b64decode(encoded), suffix=".jpeg"))
+                except (ValueError, TypeError):
+                    raise MediaError("MiniMax 返回的 image_base64 不是合法 base64") from None
+            return images
         urls = data.get("image_urls") or []
         if urls:
-            return ImageResult(data=b"", suffix=guess_suffix(urls[0]), url=str(urls[0]))
+            return [ImageResult(data=b"", suffix=guess_suffix(str(url)), url=str(url)) for url in urls]
         raise MediaError(f"MiniMax 图片响应里没有图像：{json.dumps(payload)[:300]}")
 
     # ------------------------------------------------------------- videos

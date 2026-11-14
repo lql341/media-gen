@@ -172,6 +172,13 @@ def call_tool(name: str, arguments: dict) -> dict:
         return _capture(cli.cmd_models, args)
 
     if name == "media_image":
+        def _image(args):
+            outcome = _capture(cli.cmd_image, args)
+            if outcome.get("ok"):
+                lines = [line for line in str(outcome.get("result", "")).splitlines() if line.strip()]
+                outcome["result"] = lines if len(lines) > 1 else (lines[0] if lines else "")
+            return outcome
+
         args = _args(
             prompt=arguments.get("prompt"),
             model=arguments.get("model"),
@@ -182,7 +189,7 @@ def call_tool(name: str, arguments: dict) -> dict:
             dry_run=bool(arguments.get("dry_run")),
             profile=arguments.get("profile") or None,
         )
-        return _capture(cli.cmd_image, args)
+        return _image(args)
 
     if name == "media_video":
         args = _args(

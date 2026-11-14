@@ -141,6 +141,13 @@ def write_artifact(path: str, payload: bytes) -> None:
         handle.write(payload)
 
 
+def variant_path(base: str, index: int, suffix: str | None) -> str:
+    """批量图片：<stem>-1<suffix>、<stem>-2<suffix> …（保留原扩展名，缺失时用服务端后缀）"""
+    root, extension = os.path.splitext(base)
+    extension = extension or (suffix or ".png")
+    return f"{root}-{index}{extension}"
+
+
 def default_output(kind: str) -> str:
     stamp = time.strftime("%Y%m%d-%H%M%S")
     return f"media-{stamp}.{'mp4' if kind == 'video' else 'png'}"
@@ -225,19 +232,25 @@ def cmd_image(args) -> int:
     ref = os.path.expanduser(args.image) if args.image else None
     if ref and not os.path.isfile(ref):
         die(f"找不到参考图：{ref}")
-    result = protocol.image(model, args.prompt, size=size, n=args.n, ref=ref)
-    payload = result.data
-    if not payload and result.url:
-        announce(f"从 {result.url[:80]}… 下载图片")
-        payload = protocol.fetch(result.url)
-    if not payload:
-        die("服务端没有返回图片内容")
-    out = args.out or default_output("image")
-    write_artifact(out, payload)
-    announce(f"模型 {model} · {size or '默认尺寸'} · {len(payload)} 字节")
-    if result.url:
-        announce(f"远端地址 {result.url}")
-    print(out)
+    results = protocol.image(model, args.prompt, size=size, n=args.n, ref=ref)
+    if not results:
+        die("服务端没有返回任何图片")
+    base_out = args.out or default_output("image")
+    written: list[str] = []
+    for index, result in enumerate(results, 1):
+        payload = result.data
+        if not payload and result.url:
+            announce(f"从 {result.url[:80]}… 下载图片")
+            payload = protocol.fetch(result.url)
+        if not payload:
+            die(f"第 {index} 张图片没有内容")
+        path = base_out if len(results) == 1 else variant_path(base_out, index, result.suffix)
+        write_artifact(path, payload)
+        written.append(path)
+        announce(f"#{index} {len(payload)} 字节" + (f" · {result.url}" if result.url else ""))
+    announce(f"模型 {model} · {size or '默认尺寸'} · {len(written)} 张")
+    for path in written:
+        print(path)
     return 0
 
 
