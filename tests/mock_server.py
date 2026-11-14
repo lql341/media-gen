@@ -85,6 +85,7 @@ def make_handler(state: State):
                             {"id": "wan2.5-t2i-preview", "object": "model"},
                             {"id": "gpt-image-1", "object": "model"},
                             {"id": "tts-1", "object": "model"},
+                            {"id": "whisper-1", "object": "model"},
                             {"id": "text-only-model", "object": "model"},
                         ],
                     },
@@ -192,6 +193,17 @@ def make_handler(state: State):
                 if "multipart/form-data" not in ctype:
                     return self._json(400, {"error": {"message": "expected multipart"}})
                 return self._json(200, {"data": [{"b64_json": B64_PNG}]})
+            if path in ("/v1/audio/transcriptions", "/audio/transcriptions"):
+                ctype = self.headers.get("Content-Type", "")
+                if "multipart/form-data" not in ctype:
+                    return self._json(400, {"error": {"message": "expected multipart"}})
+                return self._json(200, {"text": "hello from mock"})
+            if path in ("/custom/speech",):
+                return self._send(200, b"WAVFAKE", "audio/wav")
+            if path in ("/custom/transcribe",):
+                if "multipart/form-data" not in self.headers.get("Content-Type", ""):
+                    return self._json(400, {"error": {"message": "expected multipart"}})
+                return self._json(200, {"data": {"text": "custom transcript"}})
             if path in ("/v1/audio/speech", "/audio/speech"):
                 if body.get("input") is None:
                     return self._json(400, {"error": {"message": "input required"}})

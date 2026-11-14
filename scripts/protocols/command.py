@@ -143,6 +143,27 @@ class CommandProtocol(Protocol):
             raise MediaError("command.create 需要返回 {task_id}")
         return str(task_id)
 
+    def speech(self, model: str, text: str, *, voice: str | None, fmt: str | None) -> tuple[bytes, str]:
+        payload = {"model": model, "input": text}
+        if voice:
+            payload["voice"] = voice
+        if fmt:
+            payload["format"] = fmt
+        raw = self._run("speech", payload)
+        if not raw:
+            raise MediaError("command.speech 没有输出音频字节")
+        return raw, "." + (fmt or "mp3").lstrip(".")
+
+    def transcribe(self, model: str, path: str, *, language: str | None) -> str:
+        payload = {"model": model, "file": path}
+        if language:
+            payload["language"] = language
+        result = self._json("transcribe", payload)
+        text = result.get("text")
+        if not text:
+            raise MediaError("command.transcribe 需要返回 {text}")
+        return str(text)
+
     def video_status(self, task_id: str) -> VideoState:
         result = self._json("status", {"task_id": task_id})
         return VideoState(

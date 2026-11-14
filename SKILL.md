@@ -62,10 +62,11 @@ Never conclude that a model "does not exist" because one endpoint lacks it: ask 
 | Multiple accounts, one endpoint | `setup.sh add <name> --account <alias> … --key-stdin`, then `--profile <name>@<alias>` or `MEDIA_ACCOUNT` |
 | Concurrent sessions | `MEDIA_PROFILE=<name>@<alias>` per process; accounts never fall back to the default account's key |
 | Move configuration | `setup.sh export` / `import <file>` (no secrets) · `migrate` (from seedance) |
-| What can this endpoint do? | `media.py models [--kind image|video] [--json]` |
+| What can this endpoint do? | `media.py models [--kind image|video|speech|transcription] [--json]` |
 | Text to image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` (`n>1` → `out-1.png`, `out-2.png`, …) |
 | Image editing | `media.py image -p "<prompt>" --model M --image ref.png [--mask m.png] [-o out.png]` |
-| Speech | `media.py speech -t "<text>" --model tts-1 [--voice alloy] [--format mp3] [-o out.mp3]` |
+| Speech (TTS) | `media.py speech -t "<text>" --model tts-1 [--voice alloy] [--format mp3] [-o out.mp3]` |
+| Transcription (STT) | `media.py transcribe -f audio.mp3 --model whisper-1 [--language zh] [-o out.txt]` |
 | Text/image to video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [-o out.mp4]` |
 | Either, auto-detected | `media.py run --model M …` |
 | Task status / wait / fetch | `media.py status <id>` · `wait <id>` · `download <id> out.mp4` |
@@ -107,5 +108,6 @@ chat model. Attach `scripts/mcp_server.py` as an MCP server instead — five too
 - Image-to-video: the `openai` protocol sends multipart `input_reference` (works on OpenAI Videos and
   LiteLLM); Ark and MiniMax take local files (base64); DashScope needs a public URL and refuses
   locally with a hint.
-- Speech output is raw audio; the suffix comes from `--format` (default `.mp3`). `run` refuses audio
-  models and points at `speech`.
+- Speech output is raw audio; the suffix comes from `--format` (default `.mp3`). `run` refuses speech
+  and transcription models and points at `speech` / `transcribe`.
+- Native vendor TTS/STT is not guessed: wrap it with a `custom` template or a `command` hook.

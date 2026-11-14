@@ -187,6 +187,9 @@ class Protocol:
     def speech(self, model: str, text: str, *, voice: str | None, fmt: str | None) -> tuple[bytes, str]:
         raise MediaError(f"{self.name} 协议不支持语音合成（/audio/speech）")
 
+    def transcribe(self, model: str, path: str, *, language: str | None) -> str:
+        raise MediaError(f"{self.name} 协议不支持语音转写（/audio/transcriptions）")
+
     def video_create(
         self,
         model: str,

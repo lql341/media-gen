@@ -80,9 +80,23 @@ class OpenAIProtocol(Protocol):
         if not raw:
             raise MediaError("POST /audio/speech 没有返回音频内容")
         suffix = "." + (fmt or "mp3").lstrip(".")
-        if suffix in (".pcm",):
-            suffix = ".pcm"
         return raw, suffix
+
+    def transcribe(self, model: str, path: str, *, language: str | None) -> str:
+        fields = {"model": model, "response_format": "json"}
+        if language:
+            fields["language"] = language
+        body, content_type = encode_multipart(fields, {"file": file_part(path)})
+        status, payload, raw = self._request(
+            "POST", self.endpoint.base_url + "/audio/transcriptions", body,
+            headers={"Content-Type": content_type},
+        )
+        if status >= 400:
+            raise MediaError(f"POST /audio/transcriptions → {status}：{error_message(payload, raw)}")
+        text = payload.get("text") if isinstance(payload, dict) else None
+        if not text:
+            raise MediaError(f"转写响应里没有 text：{raw[:200]!r}")
+        return str(text)
 
     # ------------------------------------------------------------- videos
 

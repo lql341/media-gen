@@ -410,8 +410,10 @@ def cmd_run(args) -> int:
         return cmd_image(args)
     if kind == "video":
         return cmd_video(args)
-    if kind == "audio":
-        die(f"{model} 是语音模型；用 speech 子命令：media.py speech -t \"文本\" --model {model}")
+    if kind == "speech":
+        die(f"{model} 是语音合成模型；用 speech 子命令：media.py speech -t \"文本\" --model {model}")
+    if kind == "transcription":
+        die(f"{model} 是语音转写模型；用 transcribe 子命令：media.py transcribe -f audio.mp3 --model {model}")
     die(f"无法判断 {model} 是图片还是视频模型；用 image 或 video 子命令显式指定")
 
 
@@ -436,6 +438,35 @@ def cmd_speech(args) -> int:
     write_artifact(out, payload)
     announce(f"模型 {model} · {len(payload)} 字节")
     print(out)
+    return 0
+
+
+def cmd_transcribe(args) -> int:
+    name, profile, protocol = make_context(args)
+    model = (
+        args.model
+        or os.environ.get("MEDIA_TRANSCRIBE_MODEL", "")
+        or ((profile.get("default_models") or {}).get("transcription")
+            if isinstance(profile.get("default_models"), dict) else None)
+    )
+    if not model:
+        die("transcribe 需要 --model（或用 setup.sh add … --default-transcription 保存默认值）", 2)
+    path = os.path.expanduser(args.file)
+    if not os.path.isfile(path):
+        die(f"找不到音频文件：{path}")
+    if args.dry_run:
+        print(json.dumps({
+            "profile": name, "protocol": profile["protocol"], "kind": "transcription",
+            "model": model, "file": path, "language": args.language,
+        }, ensure_ascii=False, indent=2))
+        return 0
+    text = protocol.transcribe(model, path, language=args.language)
+    if args.out:
+        write_artifact(os.path.expanduser(args.out), (text + "\n").encode("utf-8"))
+        announce(f"{len(text)} 字符 → {args.out}")
+        print(args.out)
+    else:
+        print(text)
     return 0
 
 
@@ -509,7 +540,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_models = sub.add_parser("models", help="列出端点/能力表里的媒体模型")
-    p_models.add_argument("--kind", choices=("image", "video", "audio"))
+    p_models.add_argument("--kind", choices=("image", "video", "speech", "transcription"))
     p_models.add_argument("--json", action="store_true")
     p_models.set_defaults(func=cmd_models)
 
@@ -569,6 +600,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_speech.add_argument("-o", "--out", help="输出文件路径")
     p_speech.add_argument("--dry-run", action="store_true")
     p_speech.set_defaults(func=cmd_speech)
+
+    p_transcribe = sub.add_parser("transcribe", help="语音转写（/audio/transcriptions）")
+    p_transcribe.add_argument("-f", "--file", required=True, help="音频文件")
+    p_transcribe.add_argument("--model")
+    p_transcribe.add_argument("--language")
+    p_transcribe.add_argument("-o", "--out", help="写入文本文件（默认打到 stdout）")
+    p_transcribe.add_argument("--dry-run", action="store_true")
+    p_transcribe.set_defaults(func=cmd_transcribe)
 
     p_doctor = sub.add_parser("doctor", help="只读自检：配置、/models、媒体模型覆盖情况")
     p_doctor.set_defaults(func=cmd_doctor)

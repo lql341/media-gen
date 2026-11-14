@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.0 - 2026-11-14
+
+Speech-to-text, and audio for non-official endpoints — the multimodal surface is now complete.
+
+- **Transcription**: `media.py transcribe -f audio.mp3 --model whisper-1 [--language] [-o out.txt]`
+  over multipart `/audio/transcriptions`; registry gains the `transcription` kind
+  (`whisper-*`, `gpt-4o(-mini)-transcribe*`, `paraformer*`), `models --kind transcription` lists them,
+  and `run` points at `transcribe`.
+- **Audio in `custom` / `command`**: a template can declare `speech` (raw bytes + `response.suffix`)
+  and `transcribe` (`response.text_path`); a command hook can implement `speech` (stdout bytes) and
+  `transcribe` (`{"text": …}`). Native vendor audio APIs stay unimplemented on purpose — wrap them
+  instead of guessing.
+- `audio` kind split into `speech` and `transcription`; `add --default-speech` /
+  `--default-transcription`; `models --kind` accepts all four kinds.
+- **`CAPABILITIES.md`**: one page listing every operation × protocol × verification level, the
+  registry fields, configuration/safety surface, agent integrations and the test matrix.
+- Tests: multipart transcription, custom speech/transcribe, command speech/transcribe, CLI
+  transcribe (stdout and `-o`), and the `run` pointer for both new kinds.
+
 ## 0.7.0 - 2026-11-14
 
 The remaining route gaps: image-to-video on gateways, image editing, last frames, speech.

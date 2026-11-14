@@ -97,6 +97,7 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 | 看能生成什么 | `media.py models [--kind image|video]` |
 | 图片编辑 | `media.py image -p "<提示词>" --model M --image 参考图.png [--mask 遮罩.png] -o out.png` |
 | 语音合成 | `media.py speech -t "<文本>" --model tts-1 [--voice alloy] [--format mp3] -o out.mp3` |
+| 语音转写 | `media.py transcribe -f audio.mp3 --model whisper-1 [--language zh] -o out.txt` |
 | 图片 | `media.py image -p "<提示词>" --model M [--size 1024x1024] [-n N] [-o out.png]`（`n>1` 写成 `out-1.png`、`out-2.png`…） |
 | 视频 | `media.py video -p "<提示词>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image 首帧图] [--last-frame 尾帧.png] [-o out.mp4]` |
 | 自动判种类 | `media.py run --model M …` |
@@ -111,7 +112,7 @@ bash tests/run-all.sh     # 六套离线测试：registry 单测、六种协议 
                           # 交互向导（管道驱动）、MCP server（stdio）、CLI 端到端；零凭据库访问
 ```
 
-非官方端点（`custom` 模板 / `command` 钩子）见 [`references/custom-endpoints.md`](references/custom-endpoints.md)；
+完整能力矩阵见 [`CAPABILITIES.md`](CAPABILITIES.md)。非官方端点（`custom` 模板 / `command` 钩子）见 [`references/custom-endpoints.md`](references/custom-endpoints.md)；
 交互向导与跨平台入口见 [`references/interactive.md`](references/interactive.md)；
 图形客户端（WorkBuddy / DSH / Claude Desktop / CodeBuddy）走 MCP，见
 [`references/gui-clients.md`](references/gui-clients.md)。

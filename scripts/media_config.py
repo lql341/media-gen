@@ -994,6 +994,10 @@ def _manage(args) -> int:
         defaults["image"] = args.default_image
     if args.default_video:
         defaults["video"] = args.default_video
+    if getattr(args, "default_speech", None):
+        defaults["speech"] = args.default_speech
+    if getattr(args, "default_transcription", None):
+        defaults["transcription"] = args.default_transcription
     if defaults and not account_flag:
         entry["default_models"] = defaults
 
@@ -1067,6 +1071,8 @@ def main(argv: list[str] | None = None) -> int:
     p_add.add_argument("--key-file")
     p_add.add_argument("--default-image")
     p_add.add_argument("--default-video")
+    p_add.add_argument("--default-speech")
+    p_add.add_argument("--default-transcription")
     p_add.add_argument("--set-default", action="store_true")
     p_add.add_argument("--custom-file", help="custom 协议的模板文件（会复制到 ~/.config/media-gen/custom/<name>.json）")
     p_add.add_argument("--command-json", help='command 协议的命令表，如 {"create":"…","status":"…","fetch":"…"}')

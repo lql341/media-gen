@@ -101,6 +101,7 @@ suite runs with `none` and asserts zero keyring operations.
 | pick an account | `media.py --profile <name>@<alias> …` or `--account <alias>` / `MEDIA_ACCOUNT` |
 | image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [--image ref.png --mask m.png] [-o out.png]` (batch → `out-1.png`, …) |
 | speech | `media.py speech -t "<text>" --model tts-1 [--voice alloy] [--format mp3] [-o out.mp3]` |
+| transcribe | `media.py transcribe -f audio.mp3 --model whisper-1 [--language zh] [-o out.txt]` |
 | video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [--last-frame f.png] [-o out.mp4]` |
 | either | `media.py run --model M …` (kind from the registry) |
 | tasks | `media.py status <id>` · `wait <id>` · `download <id> out.mp4` · `--create-only` |
@@ -114,7 +115,8 @@ references/first-use.md        what to prepare, what the user runs
 references/setup.md            profiles, precedence, rotation, CI, security
 references/routing-image.md    image routes per protocol
 references/routing-video.md    video routes per protocol (poll + fetch, image-to-video, last frame)
-references/audio.md            speech synthesis (/audio/speech)
+references/audio.md            speech synthesis + transcription
+CAPABILITIES.md                the full capability matrix (operations × protocols × verification)
 references/providers.md        per-provider quirks + verification status
 references/custom-endpoints.md  custom templates + command hooks for in-house APIs
 references/interactive.md      wizard flows, cross-platform entry points, credential-store switch

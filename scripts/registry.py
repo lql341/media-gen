@@ -93,7 +93,7 @@ def _load(path: str) -> list[dict]:
             match = [match]
         if not isinstance(match, list) or not match:
             continue
-        if rule.get("kind") not in ("image", "video", "audio"):
+        if rule.get("kind") not in ("image", "video", "speech", "transcription"):
             continue
         out.append({**rule, "match": [str(pattern) for pattern in match]})
     return out

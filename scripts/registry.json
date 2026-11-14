@@ -57,8 +57,13 @@
     },
     {
       "match": ["gpt-4o-mini-tts*", "tts-1*", "speech-*", "cosyvoice*"],
-      "kind": "audio",
-      "notes": "OpenAI 兼容语音合成（POST /audio/speech，返回音频字节）"
+      "kind": "speech",
+      "notes": "语音合成（POST /audio/speech，返回音频字节）"
+    },
+    {
+      "match": ["whisper-*", "gpt-4o-transcribe*", "gpt-4o-mini-transcribe*", "paraformer*"],
+      "kind": "transcription",
+      "notes": "语音转写（POST /audio/transcriptions，multipart 上传音频，返回 text）"
     },
     {
       "match": ["sora*", "veo*", "kling*", "pixverse*", "hunyuan-video*", "cogvideo*"],

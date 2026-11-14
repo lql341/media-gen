@@ -14,7 +14,8 @@ Protocol support:
 | --- | --- | --- |
 | `openai` | yes | `POST /audio/speech {model, input, voice?, response_format?}` → audio bytes |
 | `ark` / `dashscope` / `minimax` | no | they need their own endpoints; use `command` to wrap one |
-| `custom` / `command` | no (by design) | a TTS endpoint with an unusual shape is best wrapped by a `command` hook |
+| `custom` | yes | `"speech": {"path": …, "body": {…}, "response": {"suffix": "wav"}}` |
+| `command` | yes | `speech` hook: stdin `{model,input,voice?,format?}` → raw audio on stdout |
 
 Details worth knowing:
 
@@ -26,3 +27,19 @@ Details worth knowing:
   is ambiguous for text-to-speech.
 - Billing is per character/token at the provider; there is no draft mode, so `--dry-run` (which prints
   the request without sending it) is the cheap check.
+
+## Transcription (`/audio/transcriptions`)
+
+```bash
+scripts/media.py transcribe -f meeting.m4a --model whisper-1 [--language zh] [-o meeting.txt]
+```
+
+| Protocol | Implemented | Shape |
+| --- | --- | --- |
+| `openai` | yes | multipart `file` + `model` (+ optional `language`) → `{"text": …}` |
+| `custom` | yes | same multipart, `transcribe.response.text_path` (default `text`) |
+| `command` | yes | `transcribe` hook: stdin `{model,file,language?}` → `{"text": …}` |
+| native vendors | no | use `custom`/`command` rather than guessing a vendor's audio API |
+
+`media.py transcribe` prints the text, or writes it to `-o`; `models --kind transcription` lists the
+registry's transcription models, and `run` refuses such a model with a pointer to `transcribe`.

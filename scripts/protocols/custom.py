@@ -37,7 +37,9 @@ import json
 import mimetypes
 import urllib.parse
 
-from . import ImageResult, MediaError, Protocol, VideoState, guess_suffix
+from . import (
+    ImageResult, MediaError, Protocol, VideoState, encode_multipart, file_part, guess_suffix,
+)
 
 
 class CustomProtocol(Protocol):
@@ -145,6 +147,40 @@ class CustomProtocol(Protocol):
         if mode == "url":
             return [ImageResult(data=b"", suffix=guess_suffix(value), url=value) for value in values]
         raise MediaError(f"custom image.response.mode={mode} 不受支持（b64 / url）")
+
+    # ------------------------------------------------------------------ audio
+
+    def speech(self, model: str, text: str, *, voice: str | None, fmt: str | None) -> tuple[bytes, str]:
+        config = self.spec.get("speech")
+        if not isinstance(config, dict):
+            raise MediaError("该 custom 配置没有 speech 段")
+        values = self._values(model=model, text=text, prompt=text, voice=voice, format=fmt)
+        method = str(config.get("method", "POST")).upper()
+        url = self._path(config.get("path", "/audio/speech"), values)
+        body = self._render(config.get("body"), values)
+        status, payload, raw = self._request(method, url, body if isinstance(body, dict) else None)
+        if status >= 400:
+            raise MediaError(f"{method} {url} → {status}：{_err(payload, raw)}")
+        if not raw:
+            raise MediaError("custom speech: 响应没有音频字节")
+        response = config.get("response") or {}
+        suffix = response.get("suffix") or fmt or "mp3"
+        return raw, "." + str(suffix).lstrip(".")
+
+    def transcribe(self, model: str, path: str, *, language: str | None) -> str:
+        config = self.spec.get("transcribe")
+        if not isinstance(config, dict):
+            raise MediaError("该 custom 配置没有 transcribe 段")
+        fields = self._render(config.get("body") or {"model": "{model}"}, self._values(model=model, language=language))
+        body, content_type = encode_multipart(fields, {"file": file_part(path)})
+        url = self._path(config.get("path", "/audio/transcriptions"), {"model": model})
+        status, payload, raw = self._request("POST", url, body, headers={"Content-Type": content_type})
+        if status >= 400:
+            raise MediaError(f"POST {url} → {status}：{_err(payload, raw)}")
+        text = _dig(payload, (config.get("response") or {}).get("text_path", "text"))
+        if not text:
+            raise MediaError(f"custom transcribe: 找不到文本（{json.dumps(payload)[:200]}）")
+        return str(text)
 
     # ------------------------------------------------------------------ video
 
