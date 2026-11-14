@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.0 - 2026-11-14
+
+Readiness for publishing: verification matrix command, roadmap, redaction gate.
+
+- **`media.py doctor --matrix`**: per-capability table for the current endpoint — verifiable now / needs
+  a deployment / whether it costs money — so "what can I actually prove here" is one command.
+- **`ROADMAP.md`**: 待验证 (waiting on environment, split into endpoint / paid / other OS / external
+  accounts) vs 待开发 (not implemented), plus known boundaries that are not defects.
+- **`scripts/sanitize-check.sh`**: redaction gate for personal paths, private gateway domains, vendor
+  internal ids, task ids, key shapes and cost figures. It runs as the final step of `tests/run-all.sh`.
+- Token/cost figures removed from committed docs (they belong to whoever runs the gateway; the CLI
+  prints the live `usage` instead).
+
 ## 0.10.1 - 2026-11-14
 
 Verification transparency + two more zero-cost live probes.
@@ -77,8 +90,8 @@ Image-to-video that actually works against a real LiteLLM gateway, plus honest n
 - Measured findings documented in `references/providers.md` and `references/routing-video.md`: the
   gateway rejects multipart despite declaring it, rejects `data:` URIs as reference images, and
   rejects `size` for first-frame tasks.
-- Live verification: 4 s / 480p / 9:16 image-to-video through the the gateway gateway, 39 820 tokens, file
-  downloaded; text-to-video, batch, edits, speech and transcribe were already covered.
+- Live verification: 4 s / 480p / 9:16 image-to-video through a LiteLLM gateway, file downloaded;
+  text-to-video and the read-only paths were already covered.
 - `CAPABILITIES.md` verification column updated to separate live from mock.
 
 ## 0.8.0 - 2026-11-14

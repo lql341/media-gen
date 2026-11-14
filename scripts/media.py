@@ -731,7 +731,61 @@ def cmd_doctor(args) -> int:
     if getattr(args, "gaps", False):
         print()
         print_verification_gaps(listed)
+    if getattr(args, "matrix", False):
+        print()
+        print_verification_matrix(listed, profile)
     return 0
+
+
+#: 能力 → (所需模型族, 是否需要付费调用, 备注)
+MATRIX_ROWS = [
+    ("文生视频 t2v", "video", False, "端点有 video deployment 即可验证"),
+    ("图生视频 i2v", "video", False, "需要公网首帧 URL 或原生协议"),
+    ("任务 status/wait/download", "video", False, "对已有任务零花费"),
+    ("remix / extend", "video", True, "会新建任务，按 token 计费"),
+    ("文生图 t2i", "image", False, "需要 image deployment"),
+    ("图片编辑 /images/edits", "image", False, "需要 image deployment"),
+    ("批量出图 -n", "image", False, "需要 image deployment"),
+    ("语音合成 TTS", "speech", False, "需要 speech deployment"),
+    ("语音转写 STT", "transcription", False, "需要 transcription deployment"),
+]
+
+
+def pad(text: str, width: int) -> str:
+    """按显示宽度补空格（CJK 占 2 列），让终端表格对齐。"""
+    import unicodedata
+
+    def display_width(value: str) -> int:
+        return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in value)
+
+    current = display_width(text)
+    return text + " " * max(1, width - current)
+
+
+def print_verification_matrix(listed: list[str], profile: dict) -> None:
+    """对照当前端点，算出这台机器上哪些能力可以真机验证。"""
+    present: dict[str, list[str]] = {"image": [], "video": [], "speech": [], "transcription": []}
+    for model in listed:
+        capability = registry.resolve(model)
+        kind = capability.kind if capability else registry.guess_kind(model)
+        if kind in present:
+            present[kind].append(model)
+    print(f"验证矩阵（端点 {profile['base_url']}，protocol {profile['protocol']}）")
+    print(f"  {pad('能力', 26)}{pad('可验证', 14)}{pad('付费', 6)}说明")
+    ticked = 0
+    for label, kind, paid, note in MATRIX_ROWS:
+        available = bool(present.get(kind))
+        if available:
+            ticked += 1
+        mark = "✅ 可以" if available else "⬜ 缺 deployment"
+        print(f"  {pad(label, 26)}{pad(mark, 14)}{pad('是' if paid else '否', 6)}{note}")
+    print()
+    total = len(MATRIX_ROWS)
+    print(f"  小结：{ticked}/{total} 项可在本端点上真机验证；"
+          f"缺 {', '.join(k for k in ('image', 'video', 'speech', 'transcription') if not present.get(k)) or '无'}")
+    if present.get("video"):
+        print(f"  视频模型：{', '.join(present['video'][:3])}")
+    print("  说明：标 ⬜ 的项仍由离线测试（mock）覆盖；换到带对应 deployment 的端点后重跑本命令即可。")
 
 
 def print_verification_gaps(listed: list[str]) -> None:
@@ -872,6 +926,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doctor = sub.add_parser("doctor", help="只读自检：配置、/models、媒体模型覆盖情况")
     p_doctor.add_argument("--gaps", action="store_true", help="列出该端点上无法验证的能力")
+    p_doctor.add_argument("--matrix", action="store_true",
+                          help="按能力列出本端点能否真机验证（可验证/缺 deployment + 是否付费）")
     p_doctor.set_defaults(func=cmd_doctor)
     return parser
 

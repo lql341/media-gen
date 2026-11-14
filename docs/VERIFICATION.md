@@ -1,15 +1,19 @@
 # Verification record — macOS, real gateway (2026-11-14)
 
-What was actually executed, and what is still simulated. Re-run any row with the command shown;
-costs are what the gateway reported in `usage`.
+What was actually executed, and what is still simulated. Re-run any row with the command shown.
+Deliberately no token/cost figures: the CLI prints the gateway's own `usage` per run.
 
 ## Live: calls that produced (or were meant to produce) media
 
 | # | Capability | Command | Result | Cost |
 | --- | --- | --- | --- | --- |
-| 1 | text → video | `media.py video -p "…" -s 4 --ratio 16:9 --resolution 480p -o out.mp4` | ✅ 854x480, 689 KB | 38 830 tokens |
-| 2 | text → video (vertical) | `video -s 10 --ratio 9:16 --resolution 720p` | ✅ 720x1280, 8 MB | 216 900 tokens |
-| 3 | **image → video** | `video -p … -s 4 --ratio adaptive --resolution 480p --image https://…/640x480.png` | ✅ 1.5 MB | 39 820 tokens |
+| 1 | text → video | `media.py video -p "…" -s 4 --ratio 16:9 --resolution 480p -o out.mp4` | ✅ 854x480, 689 KB | billed |
+| 2 | text → video (vertical) | `video -s 10 --ratio 9:16 --resolution 720p` | ✅ 720x1280, 8 MB | billed |
+| 3 | **image → video** | `video -p … -s 4 --ratio adaptive --resolution 480p --image https://…/640x480.png` | ✅ 1.5 MB | billed |
+
+Token/cost figures are intentionally **not** recorded here: they belong to whichever gateway the user
+runs against, and a copied number goes stale. `media.py video` prints the gateway's own `usage` after
+every run — that is the number to trust.
 | 4 | task status | `status <completed id>` | ✅ `status=completed, seconds=10, size=720x1280` | 0 |
 | 5 | wait (already done) | `wait <completed id>` | ✅ returns immediately | 0 |
 | 6 | download | `download <id> out.mp4` | ✅ 10 500 791 bytes | 0 |

@@ -139,6 +139,7 @@ scripts/install.sh             install into an agent's skills directory
 scripts/seedance.sh            deprecated shim → media.py video
 tests/                         offline suites incl. a scripted mock server
 MIGRATION.md                   moving from the seedance-only skill
+ROADMAP.md                     待验证（等环境）与待开发（未实现）清单
 ```
 
 ## Tests
@@ -152,6 +153,15 @@ Six suites, all offline: registry unit tests, protocol adapters against a script
 temp `HOME`, the interactive wizard (piped answers), the MCP server over stdio, and CLI end-to-end
 through the mock. No network, no account, no spend, **and no keyring access**
 (`MEDIA_CREDENTIAL_STORE=none`, asserted). There is no CI workflow on purpose.
+
+## Before publishing
+
+```bash
+bash scripts/sanitize-check.sh     # 本机路径 / 私有网关域名 / 厂商内部 id / 任务 id / 密钥形态 / 计费数字
+```
+
+The check is also the last step of `tests/run-all.sh`, so a green test run means nothing in the tree
+needs redacting.
 
 ## License
 

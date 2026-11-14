@@ -33,5 +33,7 @@ if grep -q "store: delete" /tmp/media-gen-test.log 2>/dev/null; then
 fi
 echo "ok    无凭据库删除"
 
+echo "=== 脱敏闸门（公开前必须通过）"
+bash "$HERE/../scripts/sanitize-check.sh"
 echo
 echo "全部通过"
