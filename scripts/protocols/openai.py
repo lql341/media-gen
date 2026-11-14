@@ -23,8 +23,22 @@ from . import (
 )
 
 
+_LOGGED_VARIANTS: list[str] = []
+
+
 class OpenAIProtocol(Protocol):
     name = "openai"
+
+    def _video_multipart(self, model, prompt, seconds, size, extra, ref):
+        fields = {"model": model, "prompt": prompt}
+        for key, value in (("seconds", seconds), ("size", size)):
+            if value is not None:
+                fields[key] = value
+        if extra:
+            fields["extra_body"] = json.dumps(extra, ensure_ascii=False)
+        payload, content_type = encode_multipart(fields, {"input_reference": file_part(ref)})
+        return self._request("POST", self.endpoint.base_url + "/videos", payload,
+                             headers={"Content-Type": content_type})
 
     def list_models(self) -> list[str] | None:
         status, payload, raw = self._request("GET", self.endpoint.base_url + "/models")
@@ -124,22 +138,65 @@ class OpenAIProtocol(Protocol):
         if extra:
             body["extra_body"] = extra
         if ref:
-            # 图生视频：multipart + input_reference（OpenAI Videos / LiteLLM 的标准形态）
-            fields = {"model": model, "prompt": prompt}
-            for key, value in (("seconds", seconds), ("size", size)):
-                if value is not None:
-                    fields[key] = value
-            if extra:
-                fields["extra_body"] = json.dumps(extra, ensure_ascii=False)
-            body_bytes, content_type = encode_multipart(fields, {"input_reference": file_part(ref)})
-            status, payload, raw = self._request(
-                "POST", self.endpoint.base_url + "/videos", body_bytes,
-                headers={"Content-Type": content_type},
-            )
+            # 图生视频。标准形态是 multipart + input_reference（OpenAI Videos / LiteLLM 的 OpenAPI
+            # 就是这么声明的），但网关实现对 JSON-only 的也不少，所以按顺序试，只在 4xx 校验失败时
+            # 才换下一种（4xx 不会建出计费任务，换法安全）。
+            reference_uri = ref if str(ref).startswith(("http://", "https://")) else data_uri(ref)
+            # 首帧任务的网关语义：ratio 必须 adaptive，且尺寸要走 extra_body 的原生参数
+            native = dict(extra)
+            native.setdefault("ratio", ratio or "adaptive")
+            if resolution:
+                native.setdefault("resolution", resolution)
+            body_for_ref = {key: value for key, value in body.items() if key != "size"}
+            attempts = [
+                *(
+                    []
+                    if str(ref).startswith(("http://", "https://"))
+                    else [("multipart input_reference",
+                           lambda: self._video_multipart(model, prompt, seconds, size, extra, ref))]
+                ),
+                (
+                    "json input_reference",
+                    lambda: self._request("POST", self.endpoint.base_url + "/videos",
+                                          {**body_for_ref, "input_reference": reference_uri,
+                                           **({"extra_body": native} if native else {})}),
+                ),
+                (
+                    "json image",
+                    lambda: self._request("POST", self.endpoint.base_url + "/videos",
+                                          {**body_for_ref, "image": reference_uri,
+                                           **({"extra_body": native} if native else {})}),
+                ),
+                (
+                    "json content[]",
+                    lambda: self._request("POST", self.endpoint.base_url + "/videos", {
+                        "model": model,
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": reference_uri}},
+                        ],
+                        **({"seconds": seconds} if seconds is not None else {}),
+                        **({"extra_body": native} if native else {}),
+                    }),
+                ),
+            ]
+            last_error = ""
+            for label, attempt in attempts:
+                status, payload, raw = attempt()
+                if status < 400:
+                    if label != "multipart input_reference":
+                        _LOGGED_VARIANTS.append(label)
+                        print(f"note: 网关不接受 multipart，已回退到 {label}", file=__import__("sys").stderr)
+                    break
+                last_error = f"{label}: {status} {error_message(payload, raw)}"
+                if status not in (400, 415, 422):
+                    raise MediaError(f"POST /videos → {status}：{error_message(payload, raw)}")
+            else:
+                raise MediaError(f"POST /videos 的四种首帧传法都被拒绝（最后一次：{last_error}）")
         else:
             status, payload, raw = self._request("POST", self.endpoint.base_url + "/videos", body)
-        if status >= 400:
-            raise MediaError(f"POST /videos → {status}：{error_message(payload, raw)}")
+            if status >= 400:
+                raise MediaError(f"POST /videos → {status}：{error_message(payload, raw)}")
         task_id = payload.get("id") or payload.get("task_id")
         if not task_id:
             raise MediaError(f"POST /videos 没有返回任务 id：{json.dumps(payload)[:300]}")

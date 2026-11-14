@@ -24,8 +24,20 @@ input_reference=@first-frame.png
 ```
 
 That is the documented shape in both OpenAI's Videos API and LiteLLM's `/videos`
-(`input_reference` is a binary field). The CLI switches to multipart automatically when `--image` is
-given, so the same command works for text-to-video and image-to-video.
+(`input_reference` is a binary field). **In practice a LiteLLM proxy may reject multipart**, so the
+adapter tries four encodings in order and stops at the first that is accepted (only `400/415/422`
+advance the ladder — those never create a billable task):
+
+1. multipart + `input_reference` (the declared shape)
+2. JSON + `input_reference: "data:…"`
+3. JSON + `image: "data:…"`
+4. JSON + `content:[{type:text},{type:image_url,image_url:{url}}]` with `ratio=adaptive` and provider
+   params in `extra_body`
+
+Measured on a LiteLLM→Volcengine gateway: (1)–(3) are rejected, (4) works, `ratio` must be `adaptive`
+(no `size`), and the reference image must be a **public URL** — `data:` URIs are rejected with
+`invalid_reference_image_url`. So `--image` accepts either a local path or an `http(s)` URL; pass a URL
+when the gateway insists on one.
 
 **Last frame**: completed tasks may carry `result.last_frame_url`. Pass `--last-frame out.png` to
 `media.py video` (or `download`) and the adapter fetches and saves it — useful for chaining clips

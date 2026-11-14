@@ -10,7 +10,7 @@ implemented in this repository; the "verified" column says how it was checked.
 | Text → image | `media.py image -p … --model M` | sync, b64 or url response, batch (`-n`) saves every image |
 | Image → image (edit) | `media.py image -p … --model M --image ref.png [--mask m.png]` | multipart `/images/edits` (openai), inline data URI (ark), `subject_reference` (minimax) |
 | Text → video | `media.py video -p … --model M [-s N] [--ratio] [--resolution]` | async: create → poll → download |
-| Image → video | `media.py video -p … --image first.png` | multipart `input_reference` (openai), data URI (ark), `img_url` (dashscope), `first_frame_image` (minimax) |
+| Image → video | `media.py video -p … --image first.png` or `--image https://…/first.png` | openai: multipart → JSON fallbacks (gateways may need a public URL and `ratio=adaptive`); ark: data URI; dashscope: public URL; minimax: data URI |
 | Last frame | `media.py video … --last-frame f.png` | parses `result.last_frame_url`; enables clip chaining |
 | Text → speech | `media.py speech -t … --model tts-1 [--voice] [--format]` | raw audio bytes; suffix from `--format` |
 | Speech → text | `media.py transcribe -f audio.mp3 --model whisper-1 [--language]` | multipart upload, returns/prints text |
@@ -21,7 +21,7 @@ implemented in this repository; the "verified" column says how it was checked.
 
 | Protocol | Images | Edit | Video | i2v | Speech | Transcribe | Verified |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `openai` (OpenAI, LiteLLM, compatible gateways) | yes | yes | yes | yes (multipart) | yes | yes | mock + live video |
+| `openai` (OpenAI, LiteLLM, compatible gateways) | yes | yes | yes | yes (multipart, with JSON fallbacks) | yes | yes | **live**: t2v, i2v (public URL), batch; mock: rest |
 | `ark` (Volcengine Seedance/Seedream) | yes | yes (data URI) | yes | yes (data URI) | — | — | mock |
 | `dashscope` (Alibaba Wan) | yes | — (clear error) | yes | public URL only | — | — | mock |
 | `minimax` (Hailuo video, image-01) | yes | yes (`subject_reference`) | yes | yes (`first_frame_image`) | — | — | mock |

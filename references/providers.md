@@ -6,7 +6,7 @@ implementing the documented wire format; it does **not** mean it was run against
 
 | Protocol | Models | Verified how | Notes |
 | --- | --- | --- | --- |
-| `openai` | any OpenAI-compatible image/video endpoint | live (video, via a LiteLLM gateway) + mock (image b64/url, video) | the safest choice for gateways |
+| `openai` | any OpenAI-compatible image/video endpoint | live: text-to-video, **image-to-video (URL)**, batch, edits, speech, transcribe; mock: everything else | the safest choice for gateways; see the i2v ladder below |
 | `ark` | `doubao-seedance-*`, `doubao-seedream-*` | mock | same vendor family as the live-tested gateway models |
 | `dashscope` | `wan*-t2i/t2v/i2v` | mock | async task API, `1024*1024` sizes, public `img_url` required for i2v |
 | `minimax` | `MiniMax-Hailuo-*`, `image-01` | mock | duration enum 6/10 s; `768P`/`1080P`; file retrieval is a second hop |
@@ -33,3 +33,28 @@ implementing the documented wire format; it does **not** mean it was run against
 4. Add mock routes to `tests/mock_server.py` and a test class in `tests/test_protocols.py`. The
    suite must exercise create → poll → download and inspect the request body.
 5. Document the quirks above and flip the verification column honestly.
+
+
+## Field notes: image-to-video through a LiteLLM gateway (measured)
+
+A LiteLLM proxy fronting Volcengine Seedance does **not** accept what the OpenAPI document suggests.
+Measured behaviour, in the order the adapter now tries them:
+
+| Attempt | Result |
+| --- | --- |
+| `multipart/form-data` + `input_reference` (as declared in the gateway's own OpenAPI) | `400 Invalid request format: 'str' object has no attribute 'pop'` — the proxy parses the body as JSON |
+| JSON + `input_reference: "data:…"` | `400` (field ignored/unknown) |
+| JSON + `image: "data:…"` | `400` (field ignored/unknown) |
+| JSON + `content: [{type:text},{type:image_url,image_url:{url}}]` with `ratio=adaptive` and provider params in `extra_body` | **works** |
+
+Two additional rules learned the hard way:
+
+- With a first frame, `ratio` must be `adaptive`; sending `size` is rejected with
+  `first_frame task requires ratio='adaptive'; use extra_body with native parameters instead of size`.
+  The adapter therefore drops `size` and sets `ratio=adaptive` automatically for reference runs.
+- The reference **must be a public URL**. A base64 `data:` URI is rejected by the provider with
+  `invalid_reference_image_url`. Local files therefore only work on adapters that accept data URIs
+  (`ark` native, `minimax`).
+
+The retry ladder is safe: it only advances on `400/415/422`, i.e. requests the gateway rejected before
+creating a billable task.

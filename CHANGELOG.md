@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.0 - 2026-11-14
+
+Image-to-video that actually works against a real LiteLLM gateway, plus honest notes about it.
+
+- The `openai` adapter now tries four reference-image encodings in order and stops at the first that
+  the gateway accepts: multipart `input_reference` → JSON `input_reference` → JSON `image` → JSON
+  `content[]` with `image_url`. The ladder only advances on `400/415/422`, which never creates a
+  billable task.
+- `--image` accepts an `http(s)` URL as well as a local path. For first-frame runs the adapter drops
+  `size`, sets `ratio=adaptive`, and forwards `ratio`/`resolution` through `extra_body` — all three are
+  required by Volcengine-backed gateways and were learned from live 400s.
+- Measured findings documented in `references/providers.md` and `references/routing-video.md`: the
+  gateway rejects multipart despite declaring it, rejects `data:` URIs as reference images, and
+  rejects `size` for first-frame tasks.
+- Live verification: 4 s / 480p / 9:16 image-to-video through the the gateway gateway, 39 820 tokens, file
+  downloaded; text-to-video, batch, edits, speech and transcribe were already covered.
+- `CAPABILITIES.md` verification column updated to separate live from mock.
+
 ## 0.8.0 - 2026-11-14
 
 Speech-to-text, and audio for non-official endpoints — the multimodal surface is now complete.

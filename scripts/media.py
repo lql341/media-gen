@@ -230,9 +230,11 @@ def cmd_image(args) -> int:
         capability = registry.resolve(model)
         if capability is not None and not capability.n:
             die(f"{model} 不支持 n>1（能力表未标注 n）")
-    ref = os.path.expanduser(args.image) if args.image else None
-    if ref and not os.path.isfile(ref):
-        die(f"找不到参考图：{ref}")
+    ref = args.image or None
+    if ref and not str(ref).startswith(("http://", "https://")):
+        ref = os.path.expanduser(ref)
+        if not os.path.isfile(ref):
+            die(f"找不到参考图（也不是 http(s) URL）：{args.image}")
     mask = os.path.expanduser(args.mask) if getattr(args, "mask", None) else None
     if mask and not os.path.isfile(mask):
         die(f"找不到遮罩图：{mask}")
@@ -284,9 +286,11 @@ def cmd_video(args) -> int:
             )
         )
         return 0
-    ref = os.path.expanduser(args.image) if args.image else None
-    if ref and not os.path.isfile(ref):
-        die(f"找不到首帧图：{ref}")
+    ref = args.image or None
+    if ref and not str(ref).startswith(("http://", "https://")):
+        ref = os.path.expanduser(ref)
+        if not os.path.isfile(ref):
+            die(f"找不到首帧图（也不是 http(s) URL）：{args.image}")
     announce(f"创建任务：{model}（{capability_line(model)}）")
     task_id = protocol.video_create(
         model,
@@ -548,7 +552,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("-p", "--prompt", required=True)
         p.add_argument("--model")
         p.add_argument("-o", "--out", help="输出文件路径")
-        p.add_argument("--image", help="参考图/首帧图（本地文件）")
+        p.add_argument("--image", help="参考图/首帧图：本地文件路径，或 http(s) URL（网关可能只接受 URL）")
         p.add_argument("--dry-run", action="store_true", help="只打印将要发送的内容，不花钱")
         p.add_argument("--interval", type=int, default=DEFAULT_INTERVAL, help="视频轮询间隔（秒）")
         p.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="视频等待上限（秒）")
