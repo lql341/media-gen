@@ -19,3 +19,4 @@ Initial release, extracted from the `arch-config` monorepo where the script and 
 - Credentials never enter `argv`: the `Authorization` header is passed to `curl` through
   `--config` on a file descriptor, so it is absent from `ps` output and shell history.
 - Offline test suites: `tests/test-config.sh`, `tests/test-cli.sh`.
+- No CI workflow: private repository, tests run locally before tagging.

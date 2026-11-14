@@ -118,6 +118,9 @@ bash tests/test-cli.sh      # --help, --dry-run, argument validation, no key lea
 Both run against a temporary `HOME`, never touch your real configuration, and never create a video
 task.
 
+There is deliberately **no CI workflow**: the repository is private, GitHub Actions minutes are not
+free, and both suites are offline and fast. Run them before tagging a release.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

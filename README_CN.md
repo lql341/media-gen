@@ -111,6 +111,8 @@ bash tests/test-cli.sh      # --help、--dry-run、参数校验、不泄露密�
 
 两者都在临时 `HOME` 下运行，不碰真实配置，也不会建任何视频任务。
 
+**不配置 CI**：仓库是私有的，Actions 分钟数不免费，而这两套测试离线、秒级，发版前本地跑一遍即可。
+
 ## 许可证
 
 MIT，见 [LICENSE](LICENSE)。
