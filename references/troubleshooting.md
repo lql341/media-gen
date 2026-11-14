@@ -1,55 +1,58 @@
 # Troubleshooting
 
-Start with the read-only checks; they distinguish configuration from gateway problems:
+Read-only checks first:
 
 ```bash
-scripts/setup.sh status     # which URL/key is actually in effect, and from where
-scripts/setup.sh doctor     # GET /models, HTTP status, are both video models listed
+scripts/setup.sh list                 # which profiles exist, which is default
+scripts/setup.sh status [--profile P] # protocol, URL, key source (masked)
+scripts/setup.sh doctor [--profile P] # GET /models + which registry models are visible
 ```
 
 ## Configuration
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `没有可用密钥；运行 scripts/setup.sh new` | nothing configured anywhere | `scripts/setup.sh new`, or export `SEEDANCE_API_KEY` |
-| `doctor` → `FAIL 密钥被拒绝` (401) | key rotated, or wrong gateway | `scripts/setup.sh modify` |
-| `doctor` → `FAIL 连不上` | DNS/proxy/URL typo | check `scripts/setup.sh status` for the URL in effect; `SEEDANCE_BASE_URL` overrides everything |
-| status shows source `只读导入` | key came from an agent's own file | rotate in that file, or `scripts/setup.sh modify` to promote a new key |
-| A shell `export SEEDANCE_API_KEY=…` wins unexpectedly | env beats credential store | unset it, or update it |
-| `写入 macOS Keychain 失败` / `secret-tool` error | keyring locked or missing | unlock the keyring, install `libsecret-tools` (Debian/Ubuntu), or use `--store file` with 0600 |
-| `setup.sh new` says it needs a terminal | agent tool call has no TTY | the user runs it in their own terminal, or use `--key-stdin` / `--key-from-agent` |
+| `还没有任何配置档` | nothing configured | `setup.sh add <name> --protocol … --base-url …` |
+| `有多个配置档，请指定 --profile` | no default set | `setup.sh use <name>` or pass `--profile` |
+| `配置档 X 缺少 base_url` | profile edited by hand | re-add it |
+| `密钥被拒绝` (401) in doctor | rotated key / wrong endpoint | re-add with the new key |
+| key source is `只读导入` | imported from an agent's own file | rotate there, or `setup.sh add … --key-stdin` |
+| `MEDIA_API_KEY` wins unexpectedly | env beats the store | unset it or update it |
+| `protocol=smtp 不受支持` | typo in `MEDIA_PROTOCOL` | `openai` / `ark` / `dashscope` / `minimax` |
 
-## Request rejections
+## Model / capability
 
-| Message | Meaning | Fix |
+| Symptom | Cause | Fix |
 | --- | --- | --- |
-| `429 No deployments available for selected model` | a video model was routed at a chat endpoint | stop; use `scripts/seedance.sh`, never retry |
-| `400 seconds must be an integer` | duration not numeric | `--seconds 4..30` or `-1` |
-| `400 duration must be an integer in 4..30 or -1` | duration out of range | clamp it |
-| `400 prompt is required for video generation` | empty prompt | pass `-p "<text>"` |
-| `400 Unsupported Volcengine video size` | `--size` not whitelisted | `--ratio` + `--resolution` |
-| `400 Resolution 'x' is not supported by this model` | bad `--resolution` | `480p` / `720p` / `1080p` |
-| `409` from `download` | clip still rendering | `scripts/seedance.sh wait <id>` first |
-| `404 Not Found` on `/videos` | gateway does not expose the Videos route | wrong base URL, or not a LiteLLM/Videos-compatible gateway |
+| `team not allowed to access model` | key's team allowlist | the错误 lists allowed models; pick one or ask the operator |
+| `404` on `/images/generations` or `/videos` | endpoint lacks the route | another profile, or the native protocol |
+| model unknown to the registry | id family not covered | add a rule to `~/.config/media-gen/registry.json` |
+| `时长下限/上限是 …` | registry constraint | use the printed range/enum |
+| `时长是枚举值 [6, 10]` | MiniMax-style enum | pass 6 or 10 |
+| `--size 需要像素尺寸` | model wants pixels | `1024x1024` |
+| `size:resolution∈{768P,1080P}` | model wants a resolution tier | `--resolution 1080P` |
+
+## Requests
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `429 No deployments available` | video model called as chat | use this CLI, never retry |
+| `图生视频的 img_url 必须是公网可访问的 URL` | DashScope needs a URL | upload the first frame, or use ark/minimax |
+| `openai 协议的首帧图需要 multipart` | protocol limitation | native protocol for image-to-video |
+| task `failed` with a provider message | provider-side error | report verbatim; a retry is a new paid request |
+| `等待超时` | long queue | task id was printed; use `status` / `wait` / `download` later |
 
 ## Downloads
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| 0-byte file | `307` redirect not followed | the script uses `curl -L`; do not hand-roll curl without it |
-| Signed URL works in a browser, fails in a script | URL expired (24 h on the reference gateway) | re-fetch with `download <id>` — the task still exists until deleted |
-| `DELETE /videos/<id>` then `download` fails | task removed | nothing to recover; regenerate if the artifact was not saved |
+| 0-byte file | redirect not followed / no content route | the adapters follow redirects; check the signed URL is still valid |
+| URL works in a browser, not later | signed URL expired | `media.py download <task_id> out.mp4` |
+| `MiniMax 任务没有 file_id` | status polled before it existed | `wait` again |
 
-## Long or stuck tasks
+## Not bugs
 
-- Typical wall clock is 1.5–5 minutes: queueing plus generation. `wait` polls every 10 s and gives
-  up after `--timeout` (default 1800 s) instead of hammering the gateway.
-- `status` showing `processing` for many minutes with `progress: null` is normal on the reference
-  gateway; it does not report a percentage.
-- `failed` carries an `error` object. Report it verbatim; do not silently retry a paid request.
-
-## Things that are not bugs
-
-- The model never appears in `/model` or a client model picker: it has no chat deployment.
-- `model` in a completed task is a gateway-internal UUID: that is the deployment, not your alias.
-- `result.width` / `result.height` are null: read the top-level `size` instead.
+- `models` shows `unknown` for chat models: the registry only classifies media families.
+- A native protocol has no `/models`: pass `--model` explicitly.
+- The same model id can appear through different profiles with different quirks — that is the
+  profile's protocol, not a bug.

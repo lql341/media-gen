@@ -1,66 +1,54 @@
-# First use: what to prepare and where to get it
+# First use: what to prepare
 
-Introduce this before asking for anything: a Seedance skill needs **two** pieces of local
-configuration, and neither may travel through chat.
+This skill is not bound to any gateway. First use needs **one endpoint** and **one key** for it,
+plus the protocol that endpoint speaks. Ask for exactly that, one item at a time.
 
-| What | Example | Where it comes from |
+| Item | Example | Where it comes from |
 | --- | --- | --- |
-| Gateway base URL | `https://your-litellm-host/v1` | whoever operates the LiteLLM gateway (for the gateway: the model-service console) |
-| API key | `sk-…` (a virtual key) | the same console, as a key scoped to the LLM routes |
+| base URL | `https://gw.example/v1` | whoever runs the endpoint (LiteLLM gateway, cloud provider) |
+| protocol | `openai` / `ark` / `dashscope` / `minimax` | which wire format that endpoint speaks |
+| API key | `sk-…` | the endpoint's console; keep it out of chat |
 
-There is no built-in default gateway, so this is a genuine first-time decision, not a confirmation
-prompt. The gateway must implement **OpenAI Videos style routes** (`POST /videos`,
-`GET /videos/<id>`, `GET /videos/<id>/content`). Any LiteLLM instance with a Seedance deployment
-does; a plain OpenAI-compatible chat endpoint does not.
+Protocol choice:
+
+- `openai` — any OpenAI-compatible endpoint, including a LiteLLM proxy that fronts Seedance/Wan/
+  Hailuo deployments. `/images/generations` and `/videos`.
+- `ark` — Volcengine Ark native (`https://ark.cn-beijing.volces.com/api/v3`).
+- `dashscope` — Alibaba Cloud Bailian native (`https://dashscope.aliyuncs.com/api/v1`).
+- `minimax` — MiniMax native (`https://api.minimaxi.com/v1`, international `api.minimax.io`).
 
 ## Check before asking
 
 ```bash
-scripts/setup.sh status     # what is already configured, and from where
-scripts/setup.sh doctor     # read-only: GET /models + are both video models listed
+scripts/setup.sh list
+scripts/setup.sh status            # masked key, source, protocol
+scripts/setup.sh doctor            # read-only: GET /models + which media models are visible
 ```
 
-If `status` already reports a key source, reuse it. Do not ask the user again, and do not migrate
-credentials without being asked.
+If a profile already works, reuse it. Do not migrate or reconfigure without being asked.
 
-## What the user runs (their own terminal)
-
-The agent must substitute the resolved absolute path for `<skill-dir>` and keep the quotes:
+## What the user runs (in their own terminal)
 
 ```bash
-bash "<skill-dir>/scripts/setup.sh" new       # interactive: URL + hidden key prompt
-bash "<skill-dir>/scripts/setup.sh" doctor    # verify
+bash "<skill-dir>/scripts/setup.sh" add litellm --protocol openai --base-url https://gw.example/v1
+bash "<skill-dir>/scripts/setup.sh" doctor --profile litellm
 ```
 
-Non-interactive equivalents (CI, dotfiles, first-boot scripts):
+The key prompt is hidden. Non-interactive equivalents:
 
 ```bash
-SEEDANCE_API_KEY="$KEY" bash "<skill-dir>/scripts/setup.sh" new --no-verify --base-url https://gw.example/v1
-bash "<skill-dir>/scripts/setup.sh" new --key-from-agent    # reuse ~/.pi/agent/auth.json (or CodeBuddy's models.json)
-printf '%s' "$KEY" | bash "<skill-dir>/scripts/setup.sh" new --key-stdin --store auto
+printf '%s' "$KEY" | bash "<skill-dir>/scripts/setup.sh" add ark --protocol ark \
+  --base-url https://ark.cn-beijing.volces.com/api/v3 --key-stdin
+MEDIA_API_KEY="$KEY" MEDIA_BASE_URL=https://gw.example/v1 python3 "<skill-dir>/scripts/media.py" models
+bash "<skill-dir>/scripts/setup.sh" migrate        # from an existing seedance config
 ```
 
 ## Rules for the agent
 
-1. Ask for **one** missing thing at a time: base URL, then key. Never both in one message.
-2. Never request the key, a key screenshot, or the contents of `auth.json` in chat. Give the
-   command; the value stays in the user's terminal.
-3. Do not launch a hidden interactive prompt from a tool call — `setup.sh new` needs a real TTY.
-4. Never write a key into `SKILL.md`, `references/`, `.env` committed to git, or a shell command
-   line: argv is visible to other local users via `ps`.
-5. After the user acts, re-run `scripts/setup.sh status` (masked) or `doctor` before generating.
-6. Say which source is in use: environment variable, Keychain, `config.json`, or the read-only
-   agent-auth import. They behave differently when the user later rotates a key.
-
-## Example introduction
-
-> Generating video needs two local settings: the gateway base URL (the LiteLLM endpoint that serves
-> the Seedance models) and an API key for it. Please run this in your terminal and paste neither
-> into chat:
->
-> `bash "<skill-dir>/scripts/setup.sh" new`
->
-> It stores the key in the macOS Keychain (or `secret-tool` on Linux). Afterwards
-> `scripts/setup.sh status` shows which source is active, with only the last four characters of the
-> key visible. Generating is billed per video token, so tell me duration and resolution before the
-> first run.
+1. One question at a time; never ask for the key or a screenshot of it.
+2. Never launch the interactive `add` from a tool call (it needs a TTY) — print the command.
+3. Never write a key into `SKILL.md`, `references/`, committed `.env`, or a command line (argv is
+   world-readable via `ps`).
+4. Say which profile and which protocol are in use; "the gateway is down" and "this key is not
+   allowed to use this model" look different and need different answers.
+5. After the user acts, run `setup.sh status` (masked) and `media.py models` before generating.

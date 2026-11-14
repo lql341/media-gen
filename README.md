@@ -1,125 +1,107 @@
-# seedance — video generation skill for coding agents
+# media-gen — image and video generation skill for coding agents
 
-An [Agent Skill](https://agentskills.io/specification) that lets a coding agent generate short
-videos with **Seedance** models (`doubao-seedance-2-5`, `doubao-seedance-2-0-260128`) through a
-LiteLLM gateway's Videos route.
+An [Agent Skill](https://agentskills.io/specification) that generates **images and videos** through
+any endpoint you configure: an OpenAI-compatible gateway (LiteLLM, OpenAI), or a provider's native
+API (Volcengine Ark, Alibaba DashScope/Wan, MiniMax). No vendor and no gateway is hard-coded.
 
-Works with any agent that can read a `SKILL.md` and run a shell script — Pi, Claude Code, Codex.
-The script alone is a complete CLI, so the skill is optional convenience.
-
-```text
-scripts/seedance.sh run -p "rainy neon street, slow push-in" -s 5 --ratio 16:9 --resolution 720p -o out.mp4
+```bash
+scripts/setup.sh add litellm --protocol openai --base-url https://gw.example/v1
+scripts/media.py models
+scripts/media.py image -p "a red apple on a white table" --model gpt-image-1 -o apple.png
+scripts/media.py video -p "rainy neon street, slow push-in" --model doubao-seedance-2-5 -s 5 -o street.mp4
 ```
 
-## Why a skill instead of an extension or an MCP server
+## Two independent decisions
 
-| Option | What the model sees | Clients | Cost to maintain |
-| --- | --- | --- | --- |
-| Bundled script only | nothing — you have to name it | any shell | lowest |
-| **Agent Skill (this repo)** | one line in the system prompt, full text on demand | Pi, Claude Code (same spec) | one Markdown file |
-| Agent extension / custom tool | a resident tool definition | one client | TypeScript following that client's API |
-| MCP server | a resident tool | any MCP client | extra process + protocol |
+| Decision | Made by | Stored in |
+| --- | --- | --- |
+| **Where** the request goes (URL, key, wire protocol) | a named profile | `~/.config/media-gen/config.json` + OS credential store |
+| **What** the model is and accepts (image/video, duration, size syntax) | the capability registry | `scripts/registry.json` + `~/.config/media-gen/registry.json` |
 
-Generation is slow (1.5–5 min) and billed per video token, so the hard part is **behaviour**:
-confirm duration before spending, never retry a `429`, switch to `--ratio` when `--size` is
-rejected. That belongs in instructions, not in a tool schema.
+That split is what makes it generic: the same `wan2.5-t2v` model is reached through a gateway
+(`protocol=openai`) or through DashScope directly (`protocol=dashscope`), and the CLI normalises
+`--size`, `-s`, `--ratio`/`--resolution` into whatever that protocol wants.
+
+## Protocols
+
+| Protocol | Endpoint style | Image | Video | Notes |
+| --- | --- | --- | --- | --- |
+| `openai` | OpenAI-compatible / LiteLLM | `/images/generations` | `/videos` + poll | the safest choice for gateways |
+| `ark` | `https://ark.cn-beijing.volces.com/api/v3` | `/images/generations` | `/contents/generations/tasks` | Seedance video, Seedream image |
+| `dashscope` | `https://dashscope.aliyuncs.com/api/v1` | async task API | async task API | Wan t2i/t2v/i2v, `1024*1024` sizes |
+| `minimax` | `https://api.minimaxi.com/v1` | `/image_generation` | `/video_generation` + 2-hop fetch | Hailuo, enum durations |
+
+Verification status per protocol is stated honestly in
+[`references/providers.md`](references/providers.md): live vs. validated against a local mock of the
+documented wire format.
 
 ## Install
 
 ```bash
-git clone https://github.com/<you>/seedance.git ~/src/seedance
-bash ~/src/seedance/scripts/install.sh            # symlink into ~/.agents/skills (Pi / Claude Code)
-bash ~/src/seedance/scripts/install.sh --copy     # copy instead of symlink
-bash ~/src/seedance/scripts/install.sh --uninstall
+git clone https://github.com/lql341/media-gen.git ~/src/media-gen
+bash ~/src/media-gen/scripts/install.sh              # symlink into ~/.agents/skills
+bash ~/src/media-gen/scripts/install.sh --codex      # or --claude / --copy / --uninstall
 ```
 
-`--pi`, `--claude`, `--codex` force a target directory. Reopen the agent (or `/reload`), then:
-
-```text
-/skill:seedance generate a 5 second clip: rainy neon street, slow push-in
-```
+Reopen the agent (or `/reload`), then `/skill:media-gen …` or just ask for an image/video.
 
 ## Configure
 
-Two settings, both local, neither of which should ever appear in chat. **The base URL has no
-built-in default** — a fresh install refuses to run until you configure one, because the gateway
-belongs to whoever deploys it:
-
 ```bash
-scripts/setup.sh new        # asks for the gateway base URL (required), then the API key (hidden input)
-scripts/setup.sh status     # which URL/key is in effect, and from where (key masked)
-scripts/setup.sh doctor     # read-only: GET /models + are both video models listed
-scripts/setup.sh modify     # rotate the key or change the URL
-scripts/setup.sh reset [--all]
+scripts/setup.sh add <name> --protocol <openai|ark|dashscope|minimax> --base-url <URL> \
+    [--key-stdin | --key-file PATH] [--default-image M] [--default-video M] [--set-default]
+scripts/setup.sh list | use <name> | rm <name> [--keep-key]
+scripts/setup.sh status [--profile P]     # masked key, source, protocol
+scripts/setup.sh doctor [--profile P]     # read-only GET /models + media model coverage
+scripts/setup.sh migrate                  # import an existing seedance config/credential
 ```
 
-Resolution order, first hit wins:
-
-| Value | Order |
-| --- | --- |
-| key | `SEEDANCE_API_KEY` → OS credential store (Keychain / `secret-tool`) → `~/.config/seedance/config.json` (`--store file`, plaintext 0600) → read-only import from `~/.pi/agent/auth.json` / `~/.codebuddy/models.json` |
-| base URL | `SEEDANCE_BASE_URL` → `config.json` → **required, no built-in default** |
-| model | `SEEDANCE_VIDEO_MODEL` → `config.json` → `doubao-seedance-2-5` |
-
-The key is passed to `curl` through `--config` on a file descriptor, so it never shows up in `ps`
-output or shell history. `status` prints only the last four characters. Details and CI recipes:
-[`references/setup.md`](references/setup.md).
+Key resolution: `MEDIA_API_KEY_<PROFILE>` → `MEDIA_API_KEY` → OS credential store → inline key
+(`--store file`, 0600) → read-only import from an agent's auth file. Keys never enter argv, shell
+history, logs, or the repository. There is **no default endpoint and no default model**.
 
 ## Use
 
 | Goal | Command |
 | --- | --- |
-| create → poll → download | `scripts/seedance.sh run -p "<prompt>" [opts] -o out.mp4` |
-| create only | `scripts/seedance.sh gen -p "<prompt>" [opts]` → `video_...` |
-| status / wait | `scripts/seedance.sh status <id>` · `wait <id> [--timeout 1800]` |
-| download | `scripts/seedance.sh download <id> out.mp4` |
-| show the request, spend nothing | `gen -p "<prompt>" [opts] --dry-run` |
-
-Options: `--model`, `--seconds` (`4..30` or `-1`), `--size 1280x720`, `--ratio 16:9|9:16|1:1`,
-`--resolution 480p|720p|1080p`, `--image <first frame.jpg>`.
-
-These models are **video-only deployments**. `/chat/completions` answers
-`429 No deployments available for selected model`, so they cannot be selected with `/model` and
-must not be added to any client's `models.json`. Route shape and measured payloads:
-[`references/routing.md`](references/routing.md).
-
-## Cost
-
-Billed per video token, so cost follows duration and output resolution. This repo carries no rate
-table on purpose: prices change per gateway, and a stale number is worse than none — ask the gateway
-operator for the current price list.
-
-Practical rule the skill enforces: draft at the lowest resolution and shortest duration that answers
-the question, then render the keeper at the resolution you need. Generation takes minutes, not
-seconds, so `--dry-run` is the cheap way to check the request.
+| discover | `media.py models [--kind image|video] [--json]` |
+| image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` |
+| video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [-o out.mp4]` |
+| either | `media.py run --model M …` (kind from the registry) |
+| tasks | `media.py status <id>` · `wait <id>` · `download <id> out.mp4` · `--create-only` |
+| no spend | add `--dry-run` |
 
 ## Layout
 
 ```text
-SKILL.md                    routing, money/time rules, command table, failure table
-references/first-use.md     what to prepare, where to get it, what the user runs
-references/setup.md         credential sources, precedence, rotation, CI, security notes
-references/routing.md       Videos route shape, request fields, completed-task payload
+SKILL.md                       routing by intent, money discipline, failure table
+references/first-use.md        what to prepare, what the user runs
+references/setup.md            profiles, precedence, rotation, CI, security
+references/routing-image.md    image routes per protocol
+references/routing-video.md    video routes per protocol (poll + fetch)
+references/providers.md        per-provider quirks + verification status
 references/troubleshooting.md  full error table
-scripts/seedance.sh         CLI: gen / status / wait / download / run
-scripts/seedance_config.py  config + credential resolution, status, doctor
-scripts/setup.sh            configuration panel (new / modify / status / doctor / reset)
-scripts/install.sh          install this skill into an agent's skills directory
-tests/                      offline tests: no network calls, no paid requests
+scripts/media.py               CLI: models / image / video / run / status / wait / download / doctor
+scripts/media_config.py        profiles + credentials (status/add/use/rm/migrate)
+scripts/registry.py|.json      capability registry and normalisation
+scripts/protocols/             openai · ark · dashscope · minimax
+scripts/setup.sh               configuration panel
+scripts/install.sh             install into an agent's skills directory
+scripts/seedance.sh            deprecated shim → media.py video
+tests/                         offline suites incl. a scripted mock server
+MIGRATION.md                   moving from the seedance-only skill
 ```
 
 ## Tests
 
 ```bash
-bash tests/test-config.sh   # precedence, 0600 perms, masking, reset, doctor failure paths
-bash tests/test-cli.sh      # --help, --dry-run, argument validation, no key leakage
+bash tests/run-all.sh
 ```
 
-Both run against a temporary `HOME`, never touch your real configuration, and never create a video
-task.
-
-There is deliberately **no CI workflow**: the repository is private, GitHub Actions minutes are not
-free, and both suites are offline and fast. Run them before tagging a release.
+Four suites, all offline: registry unit tests, protocol adapters against a scripted mock server
+(create → poll → download, request bodies inspected), configuration/credential precedence in a
+temp `HOME`, and CLI end-to-end through the mock. No network, no account, no spend. There is no CI
+workflow on purpose.
 
 ## License
 

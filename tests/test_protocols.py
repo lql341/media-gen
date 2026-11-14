@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""Protocol tests against a scripted local server: no network, no accounts, no money.
+
+Each adapter has to complete create → poll → download, and the request bodies are
+inspected so that parameter mapping (duration field, size syntax, reference image,
+async headers) cannot silently regress.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, "..", "scripts"))
+
+from mock_server import MP4, PNG, MockServer  # noqa: E402
+from protocols import Endpoint, MediaError, load_protocol  # noqa: E402
+
+
+def endpoint(server: MockServer, protocol: str, prefix: str) -> Endpoint:
+    return Endpoint(protocol=protocol, base_url=server.url(prefix), key="test-key-1234567890", timeout=10)
+
+
+class OpenAITest(unittest.TestCase):
+    def test_image_b64(self):
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            result = protocol.image("gpt-image-1", "a cat", size="1024x1024", n=1, ref=None)
+            self.assertEqual(result.data, PNG)
+            body = [call for call in server.state.calls if call[1] == "/v1/images/generations"][0][2]
+            self.assertEqual(body["size"], "1024x1024")
+            self.assertEqual(body["response_format"], "b64_json")
+
+    def test_image_url_shaped_response(self):
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            result = protocol.image("url-image", "a cat", size=None, n=1, ref=None)
+            self.assertEqual(result.data, b"")
+            self.assertTrue(result.url.endswith("/files/openai.png"))
+            self.assertEqual(protocol.fetch(result.url), PNG)
+
+    def test_video_create_poll_download(self):
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            task = protocol.video_create(
+                "doubao-seedance-2-5", "a cat", seconds=5, size="1280x720",
+                resolution=None, ratio=None, ref=None,
+            )
+            self.assertEqual(task, "video_1")
+            body = [call for call in server.state.calls if call[1] == "/v1/videos"][0][2]
+            self.assertEqual(body["seconds"], 5)
+            state = protocol.video_status(task)
+            self.assertIn(state.status, ("processing", "completed"))
+            state = protocol.video_status(task)
+            self.assertTrue(state.done)
+            self.assertEqual(protocol.video_fetch(task, state), MP4)
+
+    def test_video_ratio_resolution_goes_into_extra_body(self):
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            protocol.video_create(
+                "doubao-seedance-2-5", "a cat", seconds=-1, size=None,
+                resolution="720p", ratio="16:9", ref=None,
+            )
+            body = [call for call in server.state.calls if call[1] == "/v1/videos"][0][2]
+            self.assertEqual(body["extra_body"], {"ratio": "16:9", "resolution": "720p"})
+
+    def test_video_failure_is_reported(self):
+        with MockServer() as server:
+            server.state.video_mode = "fail"
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            state = protocol.video_status("video_1")
+            self.assertTrue(state.failed)
+            self.assertEqual(state.error, "boom")
+
+    def test_reference_image_is_refused_with_a_hint(self):
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            with self.assertRaises(MediaError) as raised:
+                protocol.video_create(
+                    "doubao-seedance-2-5", "x", seconds=5, size=None,
+                    resolution=None, ratio=None, ref=os.path.abspath(__file__),
+                )
+            self.assertIn("input_reference", str(raised.exception))
+
+
+class ArkTest(unittest.TestCase):
+    def test_image(self):
+        with MockServer() as server:
+            protocol = load_protocol("ark")(endpoint(server, "ark", "/api/v3"))
+            self.assertEqual(protocol.image("doubao-seedream-4-0", "a cat", size="1024x1024", n=1, ref=None).data, PNG)
+
+    def test_video_body_and_download(self):
+        with MockServer() as server:
+            protocol = load_protocol("ark")(endpoint(server, "ark", "/api/v3"))
+            task = protocol.video_create(
+                "doubao-seedance-2-5", "a cat", seconds=5, size=None,
+                resolution="720p", ratio="16:9", ref=None,
+            )
+            body = [call for call in server.state.calls if call[1] == "/api/v3/contents/generations/tasks"][0][2]
+            self.assertEqual(body["duration"], 5)
+            self.assertEqual(body["ratio"], "16:9")
+            self.assertEqual(body["resolution"], "720p")
+            self.assertEqual(body["content"][0], {"type": "text", "text": "a cat"})
+            state = protocol.video_status(task)
+            self.assertTrue(state.done)
+            self.assertEqual(protocol.video_fetch(task, state), MP4)
+
+
+class DashScopeTest(unittest.TestCase):
+    def test_image_is_async(self):
+        with MockServer() as server:
+            protocol = load_protocol("dashscope")(endpoint(server, "dashscope", "/api/v1"))
+            result = protocol.image("wan2.5-t2i-preview", "a cat", size="1024*1024", n=1, ref=None)
+            self.assertTrue(result.url.endswith("/files/dash.png"))
+            self.assertEqual(protocol.fetch(result.url), PNG)
+            body = [
+                call for call in server.state.calls
+                if call[1] == "/api/v1/services/aigc/text2image/image-synthesis"
+            ][0][2]
+            self.assertEqual(body["parameters"]["size"], "1024*1024")
+
+    def test_video_task_and_status_mapping(self):
+        with MockServer() as server:
+            protocol = load_protocol("dashscope")(endpoint(server, "dashscope", "/api/v1"))
+            task = protocol.video_create(
+                "wan2.5-t2v-preview", "a cat", seconds=5, size="1280*720",
+                resolution=None, ratio=None, ref=None,
+            )
+            body = [
+                call for call in server.state.calls
+                if call[1] == "/api/v1/services/aigc/video-generation/video-synthesis"
+            ][0][2]
+            self.assertEqual(body["parameters"]["duration"], 5)
+            self.assertEqual(body["parameters"]["size"], "1280*720")
+            state = protocol.video_status(task)
+            self.assertEqual(state.status, "completed")
+            self.assertEqual(protocol.video_fetch(task, state), MP4)
+
+    def test_local_reference_image_is_refused(self):
+        with MockServer() as server:
+            protocol = load_protocol("dashscope")(endpoint(server, "dashscope", "/api/v1"))
+            with self.assertRaises(MediaError) as raised:
+                protocol.video_create(
+                    "wan2.5-i2v-preview", "x", seconds=5, size=None,
+                    resolution=None, ratio=None, ref=os.path.abspath(__file__),
+                )
+            self.assertIn("URL", str(raised.exception))
+
+
+class MinimaxTest(unittest.TestCase):
+    def test_image(self):
+        with MockServer() as server:
+            protocol = load_protocol("minimax")(endpoint(server, "minimax", "/v1"))
+            self.assertEqual(protocol.image("image-01", "a cat", size="1024x1024", n=1, ref=None).data, PNG)
+            body = [call for call in server.state.calls if call[1] == "/v1/image_generation"][0][2]
+            self.assertEqual((body["width"], body["height"]), (1024, 1024))
+
+    def test_video_file_retrieval(self):
+        with MockServer() as server:
+            protocol = load_protocol("minimax")(endpoint(server, "minimax", "/v1"))
+            task = protocol.video_create(
+                "MiniMax-Hailuo-02", "a cat", seconds=6, size=None,
+                resolution="1080P", ratio=None, ref=None,
+            )
+            body = [call for call in server.state.calls if call[1] == "/v1/video_generation"][0][2]
+            self.assertEqual(body["duration"], 6)
+            self.assertEqual(body["resolution"], "1080P")
+            state = protocol.video_status(task)
+            self.assertTrue(state.done)
+            self.assertEqual(state.extra.get("file_id"), "f1")
+            self.assertEqual(protocol.video_fetch(task, state), MP4)
+
+    def test_base_resp_error_is_surfaced(self):
+        with MockServer() as server:
+            protocol = load_protocol("minimax")(endpoint(server, "minimax", "/v1"))
+            with self.assertRaises(MediaError):
+                protocol._check({"base_resp": {"status_code": 1004, "status_msg": "invalid api key"}}, "请求")
+
+
+class ErrorShapeTest(unittest.TestCase):
+    def test_http_error_message_is_extracted(self):
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            with self.assertRaises(MediaError) as raised:
+                protocol._json("GET", "/no-such-route")
+            self.assertIn("no route", str(raised.exception).lower())
+
+    def test_unknown_protocol(self):
+        with self.assertRaises(MediaError):
+            load_protocol("smtp")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

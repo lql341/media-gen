@@ -1,22 +1,32 @@
 # Changelog
 
+## 0.2.0 - 2026-11-14
+
+Renamed from `seedance` (0.1.0) and generalised from one gateway + one model family to
+model-agnostic image/video generation.
+
+- **Profiles**: any number of named endpoints, each with a wire protocol and its own credential.
+  `setup.sh add|use|list|rm|status|doctor|migrate`; a profile can also come entirely from
+  `MEDIA_BASE_URL` + `MEDIA_PROTOCOL` for CI.
+- **Capability registry** (`scripts/registry.json` + `~/.config/media-gen/registry.json`):
+  model id patterns decide kind (image/video) and constraints (duration range or enum, size syntax,
+  reference-image support), so no vendor logic lives in the code.
+- **Four wire protocols**: `openai` (OpenAI/LiteLLM), `ark` (Volcengine native), `dashscope`
+  (Alibaba Wan), `minimax` (Hailuo). Parameter mapping absorbs the differences: `seconds` vs
+  `duration`, `1280x720` vs `1280*720` vs `width`/`height`, `ratio`+`resolution`, async task APIs,
+  two-hop file retrieval.
+- **Unified CLI** (`scripts/media.py`): `models`, `image`, `video`, `run`, `status`, `wait`,
+  `download`, plus `--dry-run` and `--create-only`.
+- **Local validation** of duration/size against the registry before any paid request.
+- **Offline test suite** with a scripted mock server per protocol, so adapters are verified without
+  accounts or spend; verification status per protocol is documented honestly.
+- Credentials: per-profile OS credential entries (`media-gen`), env overrides
+  (`MEDIA_API_KEY_<PROFILE>` → `MEDIA_API_KEY`), read-only import from agent auth files, and
+  migration from the old `seedance-gateway` Keychain item / `~/.config/seedance/config.json`.
+- `scripts/seedance.sh` kept as a deprecation shim mapping to `media.py video`.
+
 ## 0.1.0 - 2026-11-14
 
-Initial release, extracted from the `arch-config` monorepo where the script and skill first lived.
-
-- `scripts/seedance.sh`: `gen` / `status` / `wait` / `download` / `run` over a LiteLLM gateway's
-  Videos route (`POST /videos`, `GET /videos/<id>`, `GET /videos/<id>/content`), with `--dry-run`,
-  `--ratio`/`--resolution` fallbacks when `--size` is rejected, and a bounded `wait` poller.
-- `scripts/seedance_config.py`: base URL / API key / default model resolution
-  (environment → OS credential store → `~/.config/seedance/config.json` 0600 → read-only import
-  from `~/.pi/agent/auth.json` or CodeBuddy `models.json`), `status` with masking, `doctor` that
-  verifies `GET /models` and both video model IDs, and `reset`.
-- `scripts/setup.sh`: `new` / `modify` / `status` / `doctor` / `reset`; hidden key prompt, refuses to
-  run without a TTY, supports `--key-from-agent` and `--key-stdin` for non-interactive use.
-- `scripts/install.sh`: symlink (default) or copy into `~/.agents/skills`, `~/.claude/skills`,
-  `~/.codex/skills`.
-- `SKILL.md` plus `references/first-use.md`, `setup.md`, `routing.md`, `troubleshooting.md`.
-- Credentials never enter `argv`: the `Authorization` header is passed to `curl` through
-  `--config` on a file descriptor, so it is absent from `ps` output and shell history.
-- Offline test suites: `tests/test-config.sh`, `tests/test-cli.sh`.
-- No CI workflow: private repository, tests run locally before tagging.
+Initial release as `seedance`: a five-command CLI over a LiteLLM gateway's Videos route for
+`doubao-seedance-2-5` / `doubao-seedance-2-0-260128`, with explicit gateway URL, key in the OS
+credential store, and offline tests. Tagged `v0.1.0`.

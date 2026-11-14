@@ -1,93 +1,83 @@
 ---
-name: seedance
-description: Generate, poll, and download short videos with Seedance video models (doubao-seedance-2-5, doubao-seedance-2-0-260128) through a LiteLLM gateway's Videos route. Use for text-to-video, image-to-video, task status, or downloading a finished clip. These are video-only deployments, not chat models.
+name: media-gen
+description: Generate images and videos with any configured media endpoint (OpenAI-compatible gateways such as LiteLLM, or Volcengine Ark, Alibaba DashScope Wan, MiniMax Hailuo native APIs). Use for text-to-image, text-to-video, image-to-video, task polling, and downloading finished media. Models are discovered from a capability registry, never hard-coded to one vendor.
 license: MIT
-compatibility: Requires curl and python3 on macOS or Linux. Needs a gateway base URL and an API key, configured once with scripts/setup.sh.
+compatibility: Requires python3 3.9+ (stdlib only). Needs at least one configured endpoint with an API key, added once with scripts/setup.sh.
 ---
 
-# Seedance video generation
+# media-gen
 
-Seedance models are **video-only deployments** behind a LiteLLM gateway. They appear in
-`GET /models` but `/chat/completions` and `/responses` answer
-`429 No deployments available for selected model`. Never select them with `/model`, never add them
-to `models.json` (Pi, CodeBuddy, or any client), and never retry a 429: it means a video model was
-routed at a chat endpoint.
+One skill for **image and video generation**, not one vendor and not one gateway. Two
+independent decisions decide what happens:
 
-The only entry point is this skill's scripts, which speak the gateway's Videos route:
-`POST /videos` → `GET /videos/<id>` → `GET /videos/<id>/content`.
+| Decision | Decided by | Where it lives |
+|---|---|---|
+| **Where** to send the request (URL, credentials, wire protocol) | a named *profile* | `~/.config/media-gen/config.json` + OS credential store |
+| **How** to encode the request, and whether the model is image or video | the *capability registry* | `scripts/registry.json` (+ user override) |
 
-## First use and configuration
+Protocols implemented: `openai` (OpenAI-compatible: LiteLLM proxies, most gateways),
+`ark` (Volcengine native: Seedance video, Seedream image), `dashscope` (Alibaba Wan),
+`minimax` (Hailuo video, image-01). The same model can be reached through a gateway or its
+native API — the profile decides.
 
-- On first use, check whether configuration already exists: `scripts/setup.sh status`. If the key
-  is missing, read `references/first-use.md` and explain what is needed, where to obtain it, and
-  the exact local command — in the user's language.
-- Never ask for an API key, never accept a key pasted into chat, and never echo one. Give the user
-  the command to run in their own terminal; the prompt is hidden there. Read `references/setup.md`
-  for credential-store details.
-- The skill resolves configuration in this order: `SEEDANCE_API_KEY` / `LEGACY_API_KEY` →
-  OS credential store (macOS Keychain, `secret-tool`) → `~/.config/seedance/config.json` (0600) →
-  read-only import from `~/.pi/agent/auth.json` or `~/.codebuddy/models.json`.
-- `scripts/setup.sh new|modify|status|doctor|reset` is the configuration lifecycle.
-  `scripts/setup.sh doctor` is read-only: it checks `GET /models` and whether both video models are
-  present. Reuse working configuration without re-entry.
+Never conclude that a model "does not exist" because one endpoint lacks it: ask the endpoint
+(`models`) and remember that the gateway operator controls what is mounted and allowed.
 
-## Money and time
+## First use
 
-- Every generation is billed as video tokens; the rate depends on the provider's price list, the
-  duration, and the resolution. A 480p draft costs a fraction of a 720p/1080p render, and duration
-  scales roughly linearly. Wall clock is minutes, not seconds (queueing plus generation).
-- Confirm duration and resolution before spending unless the user already stated both. Use
-  `gen --dry-run` to show the request without creating a task.
-- Prefer one shot: `run` creates, polls, and downloads in a single call. Use `gen` + `wait` only
-  when the user wants a task id to keep, resume later, or fan out several clips.
+- `scripts/setup.sh status` and `scripts/setup.sh list` first — configuration may already exist.
+- Missing configuration → read `references/first-use.md`, then have the user run, in **their own
+  terminal**: `scripts/setup.sh add <name> --protocol <p> --base-url <url>`.
+- Never ask for, accept, echo, or store an API key in chat. The key prompt is hidden; the store is
+  macOS Keychain / `secret-tool`; environment variables beat everything.
+- Never invent a base URL. There is no built-in default endpoint, by design.
+
+## Workflow
+
+1. **Discover** what is available: `media.py models` (endpoint list ∩ registry, with kind).
+   On a gateway the model list is authoritative; on a native API there is usually no `/models`,
+   so pass `--model` explicitly.
+2. **Draft cheaply.** Confirm duration/resolution/aspect before spending, unless the user already
+   stated them. `--dry-run` prints the normalized plan without sending anything.
+3. **Generate.** `media.py image …` is synchronous; `media.py video …` creates a task, polls, and
+   downloads in one call. `media.py run --model M …` picks image or video from the registry.
+4. **Report** the local file path first, then duration/size, then usage. Remote URLs are signed and
+   expire; they are not deliverables.
 
 ## Commands
 
-Run scripts relative to this skill directory:
-
 | Goal | Command |
 |---|---|
-| Configure gateway URL + key | `scripts/setup.sh new` |
-| Show effective URL/key source (masked) | `scripts/setup.sh status` |
-| Read-only connectivity check | `scripts/setup.sh doctor` |
-| End to end: create → poll → download | `scripts/seedance.sh run -p "<prompt>" [opts] -o out.mp4` |
-| Create a task only | `scripts/seedance.sh gen -p "<prompt>" [opts]` (stdout = `video_...`) |
-| Inspect a task | `scripts/seedance.sh status <id>` |
-| Wait for completion | `scripts/seedance.sh wait <id> [--timeout 1800]` |
-| Download a finished clip | `scripts/seedance.sh download <id> out.mp4` |
-| Show the request, spend nothing | `scripts/seedance.sh gen -p "<prompt>" [opts] --dry-run` |
+| Configure / inspect / verify | `setup.sh add|use|list|status|doctor|rm|migrate` |
+| What can this endpoint do? | `media.py models [--kind image|video] [--json]` |
+| Text to image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` |
+| Text/image to video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [-o out.mp4]` |
+| Either, auto-detected | `media.py run --model M …` |
+| Task status / wait / fetch | `media.py status <id>` · `wait <id>` · `download <id> out.mp4` |
+| Show the request only | add `--dry-run` |
 
-Options: `--model`, `--seconds` (`4..30`, or `-1` = model picks), `--size 1280x720`,
-`--ratio 16:9|9:16|1:1`, `--resolution 480p|720p|1080p`, `--image <first-frame.jpg>`
-(image-to-video via multipart `input_reference`).
+Parameter normalisation is the point of the registry: `--size` accepts `1024x1024` for every
+protocol (`1024*1024` for DashScope, `width/height` for MiniMax); `-s` maps to `seconds`
+(OpenAI/LiteLLM), `duration` (Ark/DashScope/MiniMax); `--ratio` + `--resolution` cover models
+whose size is expressed as aspect ratio. Model-specific limits (duration range or enum) are
+validated locally before any request.
 
-## Reporting results
-
-- Report the downloaded file path first; `result.url` is a signed object-storage link that expires
-  (24 h on the reference gateway), so it is not a deliverable on its own.
-- Include duration, pixel size, and the token usage the gateway returns in the summary.
-- Keep provider internals, signed URLs, and keys out of committed files and public reports.
-
-## Failure playbook
+## Failures worth knowing
 
 | Symptom | Meaning | Action |
 |---|---|---|
-| `429 No deployments available` | video model called as chat | stop; use these scripts |
-| `400 seconds must be an integer` | non-numeric duration | integer `4..30` or `-1` |
-| `400 duration must be an integer in 4..30 or -1` | out-of-range duration | clamp it |
-| `400 Unsupported Volcengine video size` | `WxH` not in the model's list | use `--ratio` + `--resolution` |
-| `400 Resolution 'x' is not supported` | bad `--resolution` | `480p` / `720p` / `1080p` |
-| `409` on download | clip still rendering | `wait <id>` first |
-| `307` then an empty file | redirect not followed | the script passes `-L`; do not hand-roll curl |
+| `team not allowed to access model` | key's team allowlist excludes it | report the listed allowed models; do not retry |
+| `404` on `/videos` or `/images/generations` | endpoint lacks that route | pick another profile or protocol |
+| `429 No deployments available` | video model routed at a chat endpoint | stop; use this skill's CLI |
+| duration/size rejected locally (exit 2) | registry constraint | use the printed range/enum |
+| task `failed` | provider error in the payload | report verbatim; never silently retry a paid request |
 
-Read `references/routing.md` for the route shape and measured payloads,
-`references/troubleshooting.md` for the full table.
+Full detail: `references/troubleshooting.md`; per-provider quirks: `references/providers.md`.
 
-## Stable entrypoints
+## Boundaries
 
-- `scripts/setup.sh`: configuration panel (`new`, `modify`, `status`, `doctor`, `reset`).
-- `scripts/seedance_config.py`: `status`, `doctor`, `set`, `import`, `reset`; also the internal
-  `get-key` / `get-base-url` / `get-model` used by the CLI.
-- `scripts/seedance.sh`: `gen`, `status`, `wait`, `download`, `run`.
-- `scripts/install.sh`: link or copy this skill into `~/.agents/skills`, `~/.claude/skills`, or
-  `~/.codex/skills`.
+- Generating costs money and takes minutes. Never fan out paid requests without the user's intent.
+- Keep keys, signed URLs and endpoint internals out of committed files and public reports.
+- Image-to-video needs a reference image the protocol accepts: Ark and MiniMax take local files
+  (base64), DashScope needs a public URL. The CLI refuses locally with a hint instead of failing
+  server-side.

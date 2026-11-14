@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "comment": "模型能力表：按 id 模式匹配，判定 kind（image/video）与约束。用户可用 ~/.config/media-gen/registry.json 覆盖或补充（同名 match 以用户为准）。协议（openai / ark / dashscope / minimax）由配置档决定，不在这里绑定。",
+  "rules": [
+    {
+      "match": ["doubao-seedance-*", "seedance-*"],
+      "kind": "video",
+      "duration": { "min": 4, "max": 30, "auto": -1 },
+      "size": { "form": "WxH", "fallback": "ratio+resolution", "resolutions": ["480p", "720p", "1080p"] },
+      "image_input": true,
+      "notes": "火山 Seedance；LiteLLM 上走 /videos，size 被拒时回退 extra_body.ratio + resolution"
+    },
+    {
+      "match": ["doubao-seedream-*", "seedream-*"],
+      "kind": "image",
+      "size": { "form": "WxH" },
+      "n": true,
+      "image_input": true,
+      "notes": "火山 Seedream 文生图/图生图"
+    },
+    {
+      "match": ["wan*-t2v*", "wan*-i2v*", "wanx*-t2v*", "wan*-video*"],
+      "kind": "video",
+      "duration": { "min": 2, "max": 10, "auto": -1 },
+      "size": { "form": "W*H", "resolutions": ["480P", "720P", "1080P"] },
+      "image_input": true,
+      "notes": "阿里云百炼 Wan 视频；原生 API 尺寸用 1280*720 语法"
+    },
+    {
+      "match": ["wan*-t2i*", "wanx*-t2i*", "wan*-image*"],
+      "kind": "image",
+      "size": { "form": "W*H" },
+      "n": true,
+      "notes": "阿里云百炼 Wan 文生图"
+    },
+    {
+      "match": ["MiniMax-Hailuo-*", "T2V-01*", "I2V-01*", "MiniMax-video*"],
+      "kind": "video",
+      "duration": { "enum": [6, 10] },
+      "size": { "form": "resolution", "resolutions": ["768P", "1080P"] },
+      "image_input": true,
+      "notes": "MiniMax Hailuo；时长是枚举 6/10 秒，分辨率用 768P/1080P"
+    },
+    {
+      "match": ["image-01*", "MiniMax-image*"],
+      "kind": "image",
+      "size": { "form": "aspect", "aspects": ["1:1", "16:9", "9:16", "4:3", "3:4"] },
+      "n": true,
+      "notes": "MiniMax 文生图；用 aspect_ratio 而不是像素尺寸"
+    },
+    {
+      "match": ["gpt-image-*", "dall-e-*", "flux*", "stable-diffusion*", "sd3*", "sdxl*", "imagen*"],
+      "kind": "image",
+      "size": { "form": "WxH" },
+      "n": true,
+      "notes": "OpenAI 兼容文生图"
+    },
+    {
+      "match": ["sora*", "veo*", "kling*", "pixverse*", "hunyuan-video*", "cogvideo*"],
+      "kind": "video",
+      "duration": { "min": 1, "max": 20 },
+      "size": { "form": "WxH" },
+      "image_input": true,
+      "notes": "通用视频模型；具体约束以服务端报错为准"
+    }
+  ]
+}
