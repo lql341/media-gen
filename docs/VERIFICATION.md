@@ -112,7 +112,8 @@ key's team allowlist confirms it: requesting `gpt-image-1`, `wan*`, `MiniMax-Hai
 | `custom` / `command` protocols | M | ⬜ | needs the in-house endpoint |
 | MCP server with a GUI client | M | ⬜ | needs WorkBuddy / DSH Desktop |
 | Linux keyring (`secret-tool`) | M (simulated) | ⬜ | needs a Linux box |
-| Windows (`setup.ps1`, no keyring) | – (code only) | ⬜ | needs Windows |
+| Windows (`setup.ps1`, no keyring) | M + CI (real Windows: registry, MCP) | ⬜ | `setup.ps1` and the bash suites still need a Windows box |
+| streamed download (`.part` → atomic rename) | M | ✅ | mock: chunked write, no leftovers on 404 |
 | `/videos/edits`, `/videos/characters`, `/images/variations` | – | — | not implemented (routes exist upstream) |
 | native vendor TTS/STT for ark/dashscope/minimax | – | — | deliberate; use `custom`/`command` |
 | parallel *generation* (not just waiting) | – | — | not implemented |

@@ -30,7 +30,7 @@ mock 通过不等于对过真实厂商。
 | 项 | 现状 | 需要什么 |
 | --- | --- | --- |
 | Linux 真机 + `secret-tool` 钥匙环 | 用 shim 模拟通过 | 一台 Linux；`bash tests/run-all.sh` |
-| Windows / `setup.ps1` / 无钥匙环降级 | 仅 `platform.system()` 模拟 | 一台 Windows（PowerShell 5 或 7） |
+| Windows / `setup.ps1` / 无钥匙环降级 | 纯 Python 部分（registry + MCP）已由 CI 在真实 Windows 上跑；`setup.ps1` 与 bash 套件仍只有模拟 | 一台 Windows（PowerShell 5 或 7） |
 | Windows Credential Manager | 未实现 | 可参考 Python 标准库 `ctypes` 调 `Advapi32` 的通用做法 |
 | MCP server 接图形客户端 | 仅 stdio JSON-RPC 单测 | WorkBuddy / DSH Desktop / Claude Desktop 实连 |
 
