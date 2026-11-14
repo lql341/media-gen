@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """media-gen configuration: named endpoints (profiles) + credentials.
 
 The skill is not tied to one gateway. A *profile* is one endpoint plus the wire
@@ -115,7 +116,12 @@ def _legacy_profile() -> dict:
     base = config.get("base_url")
     if not isinstance(base, str) or not base.strip():
         return {}
-    return {"protocol": "openai", "base_url": base.strip().rstrip("/")}
+    profile = {"protocol": "openai", "base_url": base.strip().rstrip("/")}
+    # 旧配置里的 model 字段就是默认视频模型，继承过来免得用户重填
+    model = config.get("model")
+    if isinstance(model, str) and model.strip():
+        profile["default_models"] = {"video": model.strip()}
+    return profile
 
 
 def profiles() -> dict[str, dict]:
