@@ -451,7 +451,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="media-gen",
         description="图片/视频生成：协议由配置档决定（openai / ark / dashscope / minimax），模型能力由 registry 决定",
     )
-    parser.add_argument("--profile", help="使用哪个配置档（默认取配置里的 default）")
+    parser.add_argument("--profile", help="配置档，可写 <name> 或 <name>@<account>（默认取配置里的 default）")
+    parser.add_argument("--account", help="账户别名（等价于 --profile <name>@<account>），会话内可并发使用不同账户")
     parser.add_argument("--timeout-seconds", type=int, default=120, help="单次 HTTP 超时（默认 120）")
     parser.add_argument("--verbose", action="store_true", help="打印密钥来源等诊断信息")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -514,6 +515,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if getattr(args, "account", None):
+        # 账户选择落在环境里，供 media_config.require_profile 统一解析（与 MEDIA_ACCOUNT 同义）
+        os.environ["MEDIA_ACCOUNT"] = str(args.account)
     try:
         return int(args.func(args) or 0)
     except registry.RegistryError as error:

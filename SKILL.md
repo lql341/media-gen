@@ -59,6 +59,8 @@ Never conclude that a model "does not exist" because one endpoint lacks it: ask 
 | Remove (config only) | `setup.sh rm <name>` · `rm --all` — secrets are never deleted unless `MEDIA_ALLOW_CREDENTIAL_DELETE=1` |
 | Audit the store | `setup.sh audit` (read-only: which items, which exact commands, is the delete gate set) |
 | Reuse an existing store item | `setup.sh add <name> --credential-ref <service>:<account>` (no copy, no write) |
+| Multiple accounts, one endpoint | `setup.sh add <name> --account <alias> … --key-stdin`, then `--profile <name>@<alias>` or `MEDIA_ACCOUNT` |
+| Concurrent sessions | `MEDIA_PROFILE=<name>@<alias>` per process; accounts never fall back to the default account's key |
 | Move configuration | `setup.sh export` / `import <file>` (no secrets) · `migrate` (from seedance) |
 | What can this endpoint do? | `media.py models [--kind image|video] [--json]` |
 | Text to image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` |

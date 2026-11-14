@@ -33,6 +33,12 @@ Custom flow asks only what the template needs — request method/path, response 
 dotted path, task id path, status field, done/failed values, video URL / duration / size paths, fetch
 mode — then prints the JSON for review before saving.
 
+## Accounts (same endpoint, several keys)
+
+The wizard asks "账户别名（留空=默认账户）". Fill it in to add a second key against the same profile;
+the account is stored under `media-gen/<profile>@<alias>` and becomes the default (`use <name>@<alias>`
+is applied automatically). Leave it empty for the ordinary single-key profile.
+
 ## Keys and the credential store
 
 - Hidden input via `getpass`; when stdin is not a TTY (CI, piped answers) it falls back to a visible

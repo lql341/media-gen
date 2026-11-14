@@ -20,7 +20,8 @@ check() { if printf '%s' "$3" | grep -qF "$2"; then printf 'ok    %s\n' "$1"; el
 
 echo "== 向导：新增 openai 端点（管道喂答案）"
 # 名字 / 协议 / base_url / 图片模型 / 视频模型 / key / 设为默认 / 自检
-answers='litellm\n1\nhttps://gw.example/v1\n\n\ntest-key-1234567890\ny\ny\nn\n'
+# 名字/协议/base_url/账户别名(空)/图片模型/视频模型/key/写入0600(y)/设为默认(y)/自检(n)
+answers='litellm\n1\nhttps://gw.example/v1\n\n\n\ntest-key-1234567890\ny\ny\nn\n'
 out=$(printf "$answers" | "$PY" "$ROOT/scripts/wizard.py" add 2>&1)
 check "向导报告已保存" "已保存配置档 litellm" "$out"
 check "协议正确" "openai" "$("$PY" "$CFG" get-protocol --profile litellm)"

@@ -167,6 +167,9 @@ def flow_add(name: str | None = None) -> None:
     except config.ConfigError as error:
         die(str(error))
 
+    account = ask("账户别名（同一端点不同密钥/工作区；留空=默认账户）", "")
+    if account and not config.ACCOUNT_RE.match(account):
+        die("账户别名只能用字母、数字、点、下划线、横线（≤32）")
     entry: dict = {"protocol": protocol, "base_url": base}
     existing = profiles().get(name) or {}
     if existing.get("default_models"):
@@ -205,9 +208,36 @@ def flow_add(name: str | None = None) -> None:
     if defaults:
         entry["default_models"] = defaults
 
-    entry = apply_key(name, entry, ask_secret())
-    save_profile(name, entry, ask_bool(f"是否把 {name} 设为默认配置档？", True))
-    out(f"\n已保存配置档 {name}（{protocol} · {base}）")
+    if account:
+        accounts = dict(entry.get("accounts") or existing.get("accounts") or {})
+        account_entry = dict(accounts.get(account) or {})
+        account_entry["base_url"] = base
+        if entry.get("default_models"):
+            account_entry["default_models"] = entry["default_models"]
+        key = ask_secret("账户 API Key（留空=不保存）")
+        if key:
+            provider = config.secure_store_name()
+            if provider:
+                try:
+                    config.store_key(name, key, account)
+                    out(f"  密钥已存入 {provider}（{config.store_item_name(name, account)}）")
+                except config.ConfigError as error:
+                    out(f"  写入 {provider} 失败：{error}")
+                    if ask_bool("  改为写入 0600 配置文件？", True):
+                        account_entry["api_key"] = key
+            elif ask_bool("  无系统凭据库，写入 0600 配置文件？", True):
+                account_entry["api_key"] = key
+        accounts[account] = account_entry
+        entry["accounts"] = accounts
+        entry.pop("api_key", None)
+    else:
+        entry = apply_key(name, entry, ask_secret())
+    save_profile(name, entry, True if account else ask_bool(f"是否把 {name} 设为默认配置档？", True))
+    if account:
+        current = config.read_config()
+        current["default"] = f"{name}@{account}"
+        config.write_config(current)
+    out(f"\n已保存{'账户 ' + name + '@' + account if account else '配置档 ' + name}（{protocol} · {base}）")
     if ask_bool("现在做一次只读自检（doctor）？", True):
         verify(name)
 

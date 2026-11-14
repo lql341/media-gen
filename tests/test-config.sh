@@ -107,6 +107,33 @@ check "rm --all 后只剩 legacy 回退档" "legacy" "$("$PY" "$CFG" list)"
 if "$PY" "$CFG" list | grep -q "primary"; then echo "FAIL  rm --all 后仍能看到 primary"; fail=1; else echo "ok    rm --all 后 primary 已消失"; fi
 
 
+echo "== 多账户（会话级隔离）"
+printf 'acct-main-1111' | "$PY" "$CFG" add multi --protocol openai --base-url https://gw.example/v1 --store file --key-stdin >/dev/null
+printf 'acct-team-2222' | "$PY" "$CFG" add multi --account team --protocol openai --base-url https://gw-team.example/v1 --store file --key-stdin --default-video doubao-seedance-2-5 >/dev/null
+check "主账户密钥" "acct-main-1111" "$("$PY" "$CFG" get-key --profile multi)"
+check "team 账户密钥" "acct-team-2222" "$("$PY" "$CFG" get-key --profile multi@team)"
+check "账户级地址覆盖" "https://gw-team.example/v1" "$("$PY" "$CFG" get-base-url --profile multi@team)"
+check "主档地址不受影响" "https://gw.example/v1" "$("$PY" "$CFG" get-base-url --profile multi)"
+check "账户级环境变量优先" "env-3333" "$(MEDIA_API_KEY_MULTI_TEAM=env-3333 "$PY" "$CFG" get-key --profile multi@team)"
+"$PY" "$CFG" use multi@team >/dev/null
+check "默认档可带账户" "multi@team" "$("$PY" "$CFG" status | sed -n 's/^配置档 *//p' | sed 's/（.*//')"
+check "默认档取账户密钥" "acct-team-2222" "$("$PY" "$CFG" get-key)"
+check "会话覆盖回主账户" "acct-main-1111" "$(MEDIA_PROFILE=multi "$PY" "$CFG" get-key)"
+python3 - "$HOME/.config/media-gen/config.json" <<'PYJSON'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path))
+data["profiles"]["multi"]["accounts"]["team"].pop("api_key", None)
+json.dump(data, open(path, "w"), indent=2)
+PYJSON
+expect_exit "具名账户不回退" 2 "$PY" "$CFG" get-key --profile multi@team
+check "主账户仍可用" "acct-main-1111" "$("$PY" "$CFG" get-key --profile multi)"
+out=$("$PY" "$CFG" show multi)
+if printf '%s' "$out" | grep -q "acct-team-2222"; then echo "FAIL  show 泄露账户密钥"; fail=1; else echo "ok    show 不泄露账户密钥"; fi
+if "$PY" "$CFG" export | grep -q "acct-team-2222"; then echo "FAIL  export 泄露账户密钥"; fail=1; else echo "ok    export 不含账户密钥"; fi
+"$PY" "$CFG" rm multi --account team >/dev/null
+check "删除账户后账户消失" "acct-main-1111" "$("$PY" "$CFG" get-key --profile multi)"
+
 echo "== 复用已有凭据库条目（credential_ref）"
 expect_exit "条目不存在时拒绝复用" 2 "$PY" "$CFG" add reuse --protocol openai \
   --base-url https://reuse.example/v1 --store file --credential-ref no-such-service:acct

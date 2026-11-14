@@ -98,6 +98,36 @@ environment variables there.
 each access (`store: read media-gen/litellm via macOS Keychain`) so you can audit it. The test suite
 runs with `none` and asserts zero keyring operations.
 
+## Multiple accounts and concurrent sessions
+
+One profile (endpoint) can carry several **accounts** — same URL, different key/workspace:
+
+```bash
+printf '%s' "$PERSONAL" | scripts/setup.sh add litellm --protocol openai --base-url https://gw/v1 --key-stdin
+printf '%s' "$TEAM"     | scripts/setup.sh add litellm --account team --protocol openai \
+                              --base-url https://gw-team/v1 --key-stdin --default-video doubao-seedance-2-5
+scripts/setup.sh use litellm@team        # default becomes the team account
+scripts/setup.sh list                    # @team listed under its profile
+```
+
+| Dimension | How it is selected |
+| --- | --- |
+| account | `--account <alias>`, `--profile <name>@<alias>`, `MEDIA_ACCOUNT`, or the `@alias` inside the saved default |
+| key | `MEDIA_API_KEY_<PROFILE>_<ACCOUNT>` → `MEDIA_API_KEY_<PROFILE>` → `MEDIA_API_KEY` → store item `media-gen/<name>@<alias>` → per-account inline 0600 key |
+| base URL / default models | per-account override in `accounts.<alias>`, else the profile's |
+| credential item | `media-gen/<name>@<alias>` — separate from the profile's default item |
+
+Rules that make concurrent sessions safe:
+
+- **No fallback between accounts.** A named account never borrows the default account's key or item;
+  a missing item is an error naming the exact store entry to create. A session cannot silently spend
+  on someone else's key.
+- **Selection is per process.** `MEDIA_PROFILE=litellm@team` / `MEDIA_ACCOUNT=team` (or `--account`)
+  affects only that invocation, so two agent sessions on one machine can drive two accounts at once.
+- **`audit` lists each account's item** and the exact delete command; `rm <name> --account <alias>`
+  removes one account (secret deletion still requires `MEDIA_ALLOW_CREDENTIAL_DELETE=1`).
+- `show` and `export` mask/hide per-account keys exactly like profile-level keys.
+
 ## Reuse an existing store item instead of copying it
 
 A profile can point at any existing credential-store item, so a secret that already lives in the

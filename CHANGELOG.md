@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 - 2026-11-14
+
+Multiple accounts per endpoint, safe for concurrent sessions.
+
+- **Accounts**: `setup.sh add <name> --account <alias> … --key-stdin` attaches a second key (and
+  optional `base_url` / default models / `credential_ref`) to the same profile. Selected by
+  `<name>@<alias>`, `--profile <name>@<alias>`, `--account`, or `MEDIA_ACCOUNT`; the saved default may
+  include an alias (`use litellm@team`).
+- **No fallback between accounts**: a named account never borrows the default account's key or store
+  item; a missing item fails with the exact entry to create. Per-account env var
+  `MEDIA_API_KEY_<PROFILE>_<ACCOUNT>` wins over the generic ones.
+- **Per-process selection** means two agent sessions can drive two accounts simultaneously without
+  touching each other's configuration.
+- Credential items are named `media-gen/<profile>@<alias>`; `audit` lists them all with exact delete
+  commands, `rm <name> --account <alias>` removes one account, `show` / `export` mask per-account keys.
+- Wizard asks for an optional alias in the add flow and sets the account as default when used.
+- Tests: account isolation, per-account base URL, env precedence, default-with-alias, no-fallback,
+  masking in `show`/`export`, and `--account` handling in the CLI.
+
 ## 0.4.2 - 2026-11-14
 
 Reuse older credentials instead of duplicating them.

@@ -85,6 +85,10 @@ Key resolution: `MEDIA_API_KEY_<PROFILE>` → `MEDIA_API_KEY` → OS credential 
 (`--store file`, 0600) → read-only import from an agent's auth file. Keys never enter argv, shell
 history, logs, or the repository. There is **no default endpoint and no default model**.
 
+Profiles can carry several accounts (same endpoint, different keys/workspaces) selected per process
+with `<name>@<alias>`, `--account`, or `MEDIA_ACCOUNT`; a named account never falls back to the
+default account's key. See `references/setup.md#multiple-accounts-and-concurrent-sessions`.
+
 The keyring is only touched when it is consulted: `MEDIA_CREDENTIAL_STORE=file|none` keeps it out of
 the loop, lookups are cached per process, and `MEDIA_DEBUG_STORE=1` prints each access. The test
 suite runs with `none` and asserts zero keyring operations.
@@ -94,6 +98,7 @@ suite runs with `none` and asserts zero keyring operations.
 | Goal | Command |
 | --- | --- |
 | discover | `media.py models [--kind image|video] [--json]` |
+| pick an account | `media.py --profile <name>@<alias> …` or `--account <alias>` / `MEDIA_ACCOUNT` |
 | image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` |
 | video | `media.py video -p "<prompt>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image first.png] [-o out.mp4]` |
 | either | `media.py run --model M …` (kind from the registry) |

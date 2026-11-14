@@ -82,6 +82,10 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 密钥优先级：`MEDIA_API_KEY_<PROFILE>` → `MEDIA_API_KEY` → 系统凭据库 → 配置文件内明文
 （`--store file`，0600）→ agent auth 文件只读导入。**没有默认端点、没有默认模型**——都归部署方决定。
 
+同一个端点可以有多个**账户**（同 URL、不同密钥/工作区）：`setup.sh add <name> --account team --key-stdin`，
+之后用 `<name>@team`、`--account team` 或 `MEDIA_ACCOUNT=team` 选择；**具名账户绝不回退**到默认账户的密钥，
+所以两个会话可以各自用自己的密钥并发跑。详见 `references/setup.md`。
+
 凭据库只在真正需要时才访问：`MEDIA_CREDENTIAL_STORE=file|none` 可完全绕开，单进程内查询带缓存
 （一次 `list` 只查一遍），`MEDIA_DEBUG_STORE=1` 会把每次访问打到 stderr。测试全部以 `none` 运行并断言
 零次凭据库操作。
@@ -94,6 +98,7 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 | 图片 | `media.py image -p "<提示词>" --model M [--size 1024x1024] [-n N] [-o out.png]` |
 | 视频 | `media.py video -p "<提示词>" --model M [-s 6] [--ratio 16:9] [--resolution 720p] [--image 首帧图] [-o out.mp4]` |
 | 自动判种类 | `media.py run --model M …` |
+| 换账户 | `media.py --profile <name>@<alias>` / `--account <alias>` / `MEDIA_ACCOUNT` |
 | 任务 | `media.py status <id>` · `wait` · `download` · `--create-only` |
 | 不花钱 | 加 `--dry-run` |
 

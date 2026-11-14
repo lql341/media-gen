@@ -87,6 +87,23 @@ echo "== run 自动判种类"
 check "run 走图片路径" "$TMP/c.png" "$("$PY" "$CLI" run -p "a cat" --model wan2.5-t2i-preview --size 1024x1024 -o "$TMP/c.png" 2>/dev/null)"
 check "run 走视频路径" "$TMP/e.mp4" "$("$PY" "$CLI" run -p "a cat" --model doubao-seedance-2-5 -s 5 --interval 0 -o "$TMP/e.mp4" 2>/dev/null)"
 
+echo "== 多账户：--account / MEDIA_ACCOUNT 选择同端点的另一把密钥（独立 HOME，避免影响后面的“无密钥”用例）"
+ACCT_HOME="$TMP/acct"; mkdir -p "$ACCT_HOME"
+export HOME="$ACCT_HOME" XDG_CONFIG_HOME="$ACCT_HOME/.config"
+unset MEDIA_API_KEY MEDIA_PROFILE
+printf 'team-key-1234' | "$PY" "$ROOT/scripts/media_config.py" add teamprof --protocol openai \
+  --base-url "$BASE" --store file --key-stdin >/dev/null
+printf 'team-key-5678' | "$PY" "$ROOT/scripts/media_config.py" add teamprof --account b --protocol openai \
+  --base-url "$BASE" --store file --key-stdin >/dev/null
+check "--account 未声明的账户报错" "没有账户" "$("$PY" "$CLI" --account nope models 2>&1 || true)"
+check "主账户可用" "video" "$("$PY" "$CLI" --profile teamprof models --kind video | head -1 | awk '{print $2}')"
+check "账户 b 可用" "video" "$("$PY" "$CLI" --profile teamprof@b models --kind video | head -1 | awk '{print $2}')"
+check "--account 与 @b 等价" "video" "$("$PY" "$CLI" --profile teamprof --account b models --kind video | head -1 | awk '{print $2}')"
+check "两账户取到不同密钥" "team-key-5678" "$("$PY" "$ROOT/scripts/media_config.py" get-key --profile teamprof@b)"
+check "主账户密钥未被覆盖" "team-key-1234" "$("$PY" "$ROOT/scripts/media_config.py" get-key --profile teamprof)"
+export HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/home/.config"
+export MEDIA_API_KEY="test-key-1234567890"
+
 echo "== 校验与报错"
 expect_exit "时长越界被本地拦下" 2 "$PY" "$CLI" video -p x --model doubao-seedance-2-5 -s 2
 expect_exit "尺寸格式错误" 2 "$PY" "$CLI" image -p x --model gpt-image-1 --size big
