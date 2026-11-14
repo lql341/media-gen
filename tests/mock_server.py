@@ -107,7 +107,8 @@ def make_handler(state: State):
                 ]})
             if path.startswith("/v1/videos/"):
                 state.video_polls += 1
-                if state.video_mode == "fail":
+                # 任务 id 里带 fail 时固定返回失败，供测试“多任务里有一个挂掉”的分支
+                if state.video_mode == "fail" or "fail" in path:
                     return self._json(200, {"id": "video_1", "status": "failed", "error": {"message": "boom"}})
                 if state.video_polls < 2:
                     return self._json(200, {"id": "video_1", "status": "processing"})

@@ -80,6 +80,9 @@ check "命名带序号" "$TMP/batch-2.png" "$(printf '%s\n' "$out" | sed -n 2p)"
 if [ -e "$TMP/batch.png" ]; then echo "FAIL  单张路径不应与批量混用"; fail=1; else echo "ok    未写出无序号文件"; fi
 out=$("$PY" "$CLI" image -p "a cat" --model gpt-image-1 -o "$TMP/one.png" 2>/dev/null)
 check "单张保持原路径" "$TMP/one.png" "$out"
+out=$("$PY" "$CLI" image -p "a cat" --model gpt-image-1 -o "~/tilde.png" 2>/dev/null)
+check "-o 的 ~ 展开到 HOME" "$HOME/tilde.png" "$out"
+if [ -s "$HOME/tilde.png" ] && [ ! -e "$ROOT/~" ]; then echo "ok    未建出名为 ~ 的目录"; else echo "FAIL  ~ 未展开（或留下了 ~ 目录）"; fail=1; fi
 
 echo "== 视频全流程"
 out=$("$PY" "$CLI" video -p "a cat" --model doubao-seedance-2-5 -s 5 --interval 0 -o "$TMP/v.mp4" 2>"$TMP/v.log")
@@ -139,6 +142,11 @@ check "--param 出现在 dry-run 计划里" "watermark" \
   "$("$PY" "$CLI" video -p x --model doubao-seedance-2-5 -s 4 --param watermark=false --dry-run 2>/dev/null)"
 out=$("$PY" "$CLI" wait video_1 video_1 --interval 0 --json 2>&1)
 check "并发 wait 返回数组" "[" "$out"
+set +e
+out=$("$PY" "$CLI" wait video_1 video_fail --interval 0 2>&1); rc=$?
+set -e
+check "一个任务失败不影响其他结果" '"task_id": "video_1"' "$out"
+[ "$rc" = 1 ] && echo "ok    有任务失败时 exit=1" || { echo "FAIL  有任务失败时 exit=$rc 期望 1"; fail=1; }
 check "台账记录了任务" "video_1" "$("$PY" "$CLI" tasks 2>/dev/null)"
 check "台账 --json" '"status"' "$("$PY" "$CLI" tasks --json 2>/dev/null)"
 check "list 列出远端任务" "video_1" "$("$PY" "$CLI" list --model doubao-seedance-2-5 2>/dev/null)"

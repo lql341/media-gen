@@ -205,6 +205,11 @@ def default_output(kind: str) -> str:
     return f"media-{stamp}.{'mp4' if kind == 'video' else 'png'}"
 
 
+def out_path(value: str | None, kind: str) -> str:
+    """-o 展开 ~（agent 常把 "~/x.png" 原样传进来），否则会建出一个名为 ~ 的目录。"""
+    return os.path.expanduser(value) if value else default_output(kind)
+
+
 # -------------------------------------------------------------------- commands
 
 
@@ -327,7 +332,7 @@ def cmd_image(args) -> int:
     )
     if not results:
         die("服务端没有返回任何图片")
-    base_out = args.out or default_output("image")
+    base_out = out_path(args.out, "image")
     written: list[str] = []
     for index, result in enumerate(results, 1):
         payload = result.data
@@ -400,7 +405,7 @@ def cmd_video(args) -> int:
             return 0
         state = wait_for(protocol, task_id, args.timeout, args.interval)
         payload = protocol.video_fetch(task_id, state)
-        out = args.out or default_output("video")
+        out = out_path(args.out, "video")
         write_artifact(out, payload)
         record_task({"id": task_id, "kind": "video", "model": model, "profile": name,
                      "status": state.status, "seconds": state.seconds, "size": state.size,
@@ -433,7 +438,7 @@ def cmd_video(args) -> int:
         return 0
     state = wait_for(protocol, task_id, args.timeout, args.interval)
     payload = protocol.video_fetch(task_id, state)
-    out = args.out or default_output("video")
+    out = out_path(args.out, "video")
     write_artifact(out, payload)
     if getattr(args, "last_frame", None) and state.last_frame_url:
         last = protocol.fetch(state.last_frame_url)
@@ -512,6 +517,7 @@ def cmd_wait(args) -> int:
     _, _, protocol = make_context(args)
     # CLI 给的是 list；程序化调用（MCP server）可能给单个字符串，list("video_1") 会拆成字符
     ids = [args.task_id] if isinstance(args.task_id, str) else list(args.task_id)
+    failed: list[str] = []
     if len(ids) == 1:
         state = wait_for(protocol, ids[0], args.timeout, args.interval)
         result = [_state_dict(state)]
@@ -519,17 +525,34 @@ def cmd_wait(args) -> int:
         from concurrent.futures import ThreadPoolExecutor
 
         announce(f"并发等待 {len(ids)} 个任务（间隔 {args.interval}s，上限 {args.timeout}s）")
+        result = []
         with ThreadPoolExecutor(max_workers=min(len(ids), 8)) as pool:
-            futures = [pool.submit(wait_for, protocol, task, args.timeout, args.interval) for task in ids]
-            result = [_state_dict(future.result()) for future in futures]
+            futures = [
+                (task, pool.submit(wait_for, protocol, task, args.timeout, args.interval))
+                for task in ids
+            ]
+            # 一个任务失败不能把其他任务已经等到的结果一起丢掉
+            for task, future in futures:
+                try:
+                    result.append(_state_dict(future.result()))
+                except SystemExit:      # wait_for 已经把原因写进 stderr（失败/超时）
+                    failed.append(task)
+                except MediaError as error:
+                    announce(f"任务 {task} 失败：{error}")
+                    failed.append(task)
         record_task({"id": ",".join(ids), "kind": "video", "status": "waited",
                      "model": None, "profile": None, "seconds": None, "size": None,
                      "file": None, "url": None})
+        if failed:
+            announce(f"{len(failed)}/{len(ids)} 个任务未完成：{', '.join(failed)}"
+                     f"；下面只含已等到的 {len(result)} 个")
+    if not result:
+        die(f"没有任务等到结果（失败：{', '.join(failed)}）", 1)
     if getattr(args, "json", False):
         print(json.dumps(result if len(result) > 1 else result[0], ensure_ascii=False))
     else:
         print(json.dumps(result if len(result) > 1 else result[0], ensure_ascii=False, indent=2))
-    return 0
+    return 1 if failed else 0
 
 
 def _state_dict(state: VideoState) -> dict:
@@ -551,7 +574,7 @@ def cmd_download(args) -> int:
     if not state.done:
         die(f"任务 {args.task_id} 尚未完成（{state.status}）；先运行 wait")
     payload = protocol.video_fetch(args.task_id, state)
-    out = args.out or default_output("video")
+    out = out_path(args.out, "video")
     write_artifact(out, payload)
     announce(f"{len(payload)} 字节")
     last_frame = getattr(args, "last_frame", None)
@@ -600,7 +623,7 @@ def cmd_speech(args) -> int:
         }, ensure_ascii=False, indent=2))
         return 0
     payload, suffix = protocol.speech(model, args.text, voice=args.voice, fmt=args.format)
-    out = args.out or f"media-{time.strftime('%Y%m%d-%H%M%S')}{suffix}"
+    out = os.path.expanduser(args.out) if args.out else f"media-{time.strftime('%Y%m%d-%H%M%S')}{suffix}"
     write_artifact(out, payload)
     announce(f"模型 {model} · {len(payload)} 字节")
     print(out)

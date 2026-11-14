@@ -199,83 +199,11 @@ class OpenAITest(unittest.TestCase):
             self.assertTrue(state.failed)
             self.assertEqual(state.error, "boom")
 
-    # 参考图现在是支持的（multipart），见 test_video_with_reference_uses_multipart
 
-    def test_transcribe_uses_multipart(self):
-        import tempfile
 
-        with MockServer() as server:
-            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as handle:
-                handle.write(b"ID3AUDIO")
-                audio = handle.name
-            try:
-                text = protocol.transcribe("whisper-1", audio, language="zh")
-                self.assertEqual(text, "hello from mock")
-            finally:
-                os.unlink(audio)
-            self.assertTrue(any("multipart/form-data" in ctype for ctype in server.state.content_types))
 
-    def test_custom_speech_and_transcribe(self):
-        spec = {
-            "speech": {"path": "/custom/speech", "body": {"model": "{model}", "input": "{text}"},
-                       "response": {"suffix": "wav"}},
-            "transcribe": {"path": "/custom/transcribe", "response": {"text_path": "data.text"}},
-        }
-        with MockServer() as server:
-            protocol = load_protocol("custom")(endpoint(server, "custom", "/"), spec)
-            payload, suffix = protocol.speech("m", "hello", voice=None, fmt=None)
-            self.assertEqual(payload, b"WAVFAKE")
-            self.assertEqual(suffix, ".wav")
-            import tempfile
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as handle:
-                handle.write(b"ID3")
-                path = handle.name
-            try:
-                self.assertEqual(protocol.transcribe("m", path, language=None), "custom transcript")
-            finally:
-                os.unlink(path)
 
-    def test_command_speech_and_transcribe(self):
-        import tempfile
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            script = os.path.join(tmpdir, "hook.sh")
-            with open(script, "w", encoding="utf-8") as handle:
-                handle.write(
-                    "#!/usr/bin/env bash\nset -eu\n"
-                    "case \"$1\" in\n"
-                    "  speech) printf 'AUDIOBYTES' ;;\n"
-                    "  transcribe) printf '{\"text\": \"command transcript\"}' ;;\n"
-                    "esac\n"
-                )
-            os.chmod(script, 0o755)
-            server = MockServer()
-            protocol = load_protocol("command")(endpoint(server, "command", "/"),
-                                               {"command": {"speech": script + " speech",
-                                                            "transcribe": script + " transcribe"}})
-            payload, suffix = protocol.speech("m", "hi", voice=None, fmt="wav")
-            self.assertEqual(payload, b"AUDIOBYTES")
-            self.assertEqual(suffix, ".wav")
-            self.assertEqual(protocol.transcribe("m", __file__, language=None), "command transcript")
-
-    def test_video_ratio_resolution_goes_into_extra_body(self):
-        with MockServer() as server:
-            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
-            protocol.video_create(
-                "doubao-seedance-2-5", "a cat", seconds=-1, size=None,
-                resolution="720p", ratio="16:9", ref=None,
-            )
-            body = [call for call in server.state.calls if call[1] == "/v1/videos"][0][2]
-            self.assertEqual(body["extra_body"], {"ratio": "16:9", "resolution": "720p"})
-
-    def test_video_failure_is_reported(self):
-        with MockServer() as server:
-            server.state.video_mode = "fail"
-            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
-            state = protocol.video_status("video_1")
-            self.assertTrue(state.failed)
-            self.assertEqual(state.error, "boom")
 
     def test_reference_image_goes_multipart(self):
         import tempfile

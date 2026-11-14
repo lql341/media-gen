@@ -68,7 +68,17 @@ def _capture(func, args) -> dict:
         with redirect_stdout(out_buffer), redirect_stderr(err_buffer):
             func(args)
     except SystemExit as exit_error:  # die() raises this
-        return {"ok": False, "error": str(exit_error) or "命令失败", "log": err_buffer.getvalue().strip()}
+        lines = [line for line in err_buffer.getvalue().strip().splitlines() if line.strip()]
+        # die() 先把原因打到 stderr 再 raise，str(SystemExit) 只有退出码（"1"）
+        detail = next(
+            (line.split(":", 1)[1].strip() for line in reversed(lines) if line.startswith("error:")),
+            "",
+        )
+        return {
+            "ok": False,
+            "error": detail or (lines[-1] if lines else "") or f"命令失败（exit={exit_error.code}）",
+            "log": err_buffer.getvalue().strip(),
+        }
     stdout = out_buffer.getvalue().strip()
     result: dict[str, object] = {"ok": True, "log": err_buffer.getvalue().strip()}
     if stdout.startswith("{"):

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.11.3 - 2026-11-15
+
+三个真行为修复，都是“明明会出错却静默”的那种。
+
+- **`wait` 多任务时一个失败不再吞掉其他结果**：之前 `[_state_dict(f.result()) for f in futures]`
+  碰到第一个异常就整体中断，其余任务已经等到的 URL/用量全丢。现在逐任务收集，输出仍含成功的
+  那些，stderr 说明哪几个没等到，退出码 1。
+- **`-o` 支持 `~`**：`-o ~/x.png` 之前会在当前目录建一个名为 `~` 的目录（`--image` / `--mask` /
+  `--last-frame` 都是展开的，只有输出路径漏了）。新增 `out_path()` 统一处理。
+- **MCP 的 `error` 字段给出真实原因**：之前只是 `str(SystemExit)`，也就是 `"1"`/`"2"`，报错信息
+  埋在 `log` 里。现在取 `die()` 写到 stderr 的 `error:` 那行。
+- 删掉 `tests/test_protocols.py` 里 5 个同名重复定义（同名覆盖，前一份从不执行）——−72 行。
+- `tests/mock_server.py`：任务 id 含 `fail` 时固定返回失败，用于上面的多任务用例。
+
 ## 0.11.2 - 2026-11-15
 
 MCP reported a version that stopped matching `VERSION` two releases ago.

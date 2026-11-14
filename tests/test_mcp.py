@@ -118,6 +118,12 @@ class McpServerTest(unittest.TestCase):
         self.assertTrue(waited["ok"], waited)
         self.assertEqual(waited["result"]["status"], "completed")
 
+    def test_error_field_carries_the_message_not_the_exit_code(self):
+        # 没有默认模型 → die()，MCP 的 error 不应只是 "2"
+        failed = self.call("media_video", {"prompt": "x"})
+        self.assertFalse(failed["ok"])
+        self.assertIn("--model", failed["error"])
+
     def test_dry_run_spends_nothing(self):
         out = self.call("media_video", {"prompt": "x", "model": "doubao-seedance-2-5", "dry_run": True})
         self.assertTrue(out["ok"])
