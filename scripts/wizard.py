@@ -377,7 +377,10 @@ def flow_remove() -> None:
             return
         current = config.read_config()
         for key in list(found):
-            config.delete_key(key)
+            try:
+                config.delete_key(key)
+            except config.ConfigError as error:
+                out(f"提示：{str(error).splitlines()[0]}")
             spec = config.custom_spec_path(key)
             if os.path.exists(spec):
                 os.remove(spec)
@@ -388,7 +391,8 @@ def flow_remove() -> None:
         return
     if name not in found:
         die(f"没有 {name}")
-    keep = ask_bool("保留密钥条目？", False)
+    out("默认不会删除系统凭据库里的密钥条目（需要显式闸门），配置会被删除。")
+    keep = ask_bool("保留密钥条目？", True)
     current = config.read_config()
     block = dict(current.get("profiles") or {})
     block.pop(name, None)
@@ -397,7 +401,10 @@ def flow_remove() -> None:
         current.pop("default", None)
     config.write_config(current)
     if not keep:
-        config.delete_key(name)
+        try:
+            config.delete_key(name)
+        except config.ConfigError as error:
+            out(f"提示：{str(error).splitlines()[0]}")
     spec = config.custom_spec_path(name)
     if os.path.exists(spec):
         os.remove(spec)

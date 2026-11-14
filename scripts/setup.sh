@@ -4,7 +4,7 @@
 #
 #   scripts/setup.sh                      交互向导（推荐：新增/修改/删除/模板生成/MCP 片段）
 #   scripts/setup.sh add <name> --protocol <openai|ark|dashscope|minimax|custom|command> --base-url <URL> [...]
-#   scripts/setup.sh list | show <name> | status [--profile P] | doctor [--profile P]
+#   scripts/setup.sh list | show <name> | audit | status [--profile P] | doctor [--profile P]
 #   scripts/setup.sh set-url <name> --base-url <URL>
 #   scripts/setup.sh set-key <name>        （stdin 传密钥）
 #   scripts/setup.sh set-protocol <name> --protocol <p> [--custom-file F | --command-json J]
@@ -30,7 +30,7 @@ case "$action" in
   -h|--help|help) usage ;;
   doctor)        exec "$PY" "$SCRIPT_DIR/media.py" ${1:+"$@"} doctor ;;
   add)           exec "$PY" "$SCRIPT_DIR/media_config.py" add "$@" ;;
-  use|list|show|rm|rename|export|import|migrate) exec "$PY" "$SCRIPT_DIR/media_config.py" "$action" "$@" ;;
+  use|list|show|audit|rm|rename|export|import|migrate) exec "$PY" "$SCRIPT_DIR/media_config.py" "$action" "$@" ;;
   set-key)       exec "$PY" "$SCRIPT_DIR/media_config.py" set-key "$@" ;;
   set-url)       exec "$PY" "$SCRIPT_DIR/media_config.py" set-url "$@" ;;
   set-protocol)  exec "$PY" "$SCRIPT_DIR/media_config.py" set-protocol "$@" ;;

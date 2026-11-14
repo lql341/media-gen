@@ -340,7 +340,28 @@ def store_key(profile: str, key: str) -> str:
     return str(provider)
 
 
+def delete_allowed() -> bool:
+    """Deleting a stored secret is opt-in: MEDIA_ALLOW_CREDENTIAL_DELETE=1 plus a real TTY."""
+    return os.environ.get("MEDIA_ALLOW_CREDENTIAL_DELETE", "").strip() == "1"
+
+
+def describe_delete(profile: str) -> str:
+    provider = secure_store_name()
+    if provider == "macOS Keychain":
+        return f'security delete-generic-password -s {SERVICE} -a {profile}'
+    if provider == "Secret Service":
+        return f'secret-tool clear service {SERVICE} account {profile}'
+    return "（本机没有可用的系统凭据库）"
+
+
 def delete_key(profile: str) -> bool:
+    """Delete one profile's secret. Never runs unless MEDIA_ALLOW_CREDENTIAL_DELETE=1."""
+    if not delete_allowed():
+        raise ConfigError(
+            "未删除凭据库条目（默认保护）。如需删除，显式执行：\n"
+            f"  MEDIA_ALLOW_CREDENTIAL_DELETE=1 {sys.argv[0]} rm {profile}\n"
+            f"  或手工：{describe_delete(profile)}"
+        )
     _STORE_CACHE.pop((SERVICE, profile), None)
     provider = secure_store_name()
     if provider == "macOS Keychain":
@@ -470,7 +491,10 @@ def _manage(args) -> int:
             names = list(found)
             for name in names:
                 if not args.keep_key:
-                    delete_key(name)
+                    try:
+                        delete_key(name)
+                    except ConfigError as error:
+                        _debug_store(f"keep {SERVICE}/{name}：{error}".splitlines()[0])
                 spec = custom_spec_path(name)
                 if os.path.exists(spec):
                     os.remove(spec)
@@ -488,7 +512,13 @@ def _manage(args) -> int:
         if config.get("default") == args.name:
             config.pop("default", None)
         write_config(config)
-        removed_key = False if args.keep_key else delete_key(args.name)
+        removed_key = False
+        if not args.keep_key:
+            try:
+                removed_key = delete_key(args.name)
+            except ConfigError as error:
+                print(f"提示：{str(error).splitlines()[0]}")
+                print(f"      配置已删除，但密钥保留；要一并删除：{describe_delete(args.name)}")
         spec = custom_spec_path(args.name)
         if os.path.exists(spec):
             os.remove(spec)
@@ -532,6 +562,21 @@ def _manage(args) -> int:
             else:
                 print(f"密钥已写入 {store_key(args.name, old_key)}")
         print(f"已迁移到配置档 {args.name}（来源：{legacy_source}）")
+        return 0
+
+    if args.command == "audit":
+        found = profiles()
+        print(f"服务名        {SERVICE}（旧：{LEGACY_SERVICE}）")
+        print(f"凭据库        {secure_store_name() or '不可用'}")
+        print(f"凭据库模式    MEDIA_CREDENTIAL_STORE={credential_store_mode()}")
+        print(f"删除闸门      MEDIA_ALLOW_CREDENTIAL_DELETE={'1（允许）' if delete_allowed() else '未设置（默认不删）'}")
+        if not found:
+            print("配置档        （无）")
+        for name in sorted(found):
+            exists = "有" if _read_store(SERVICE, name) else "无"
+            print(f"  {name:<14} 条目: {exists:<2} 删除命令: {describe_delete(name)}")
+        legacy = _read_store(LEGACY_SERVICE, "default")
+        print(f"  旧条目 legacy  条目: {'有' if legacy else '无'}（只读兼容，本工具不会删除它）")
         return 0
 
     if args.command == "show":
@@ -786,6 +831,7 @@ def main(argv: list[str] | None = None) -> int:
     p_rm.add_argument("--keep-key", action="store_true")
     p_rm.add_argument("--all", action="store_true", help="删除所有配置档（含密钥条目）")
     sub.add_parser("list", help="列出配置档")
+    sub.add_parser("audit", help="只读：本工具可能触及的凭据库条目及对应命令（不读密钥、不删除）")
     p_show = sub.add_parser("show", help="显示某个配置档的完整配置（密钥脱敏）")
     p_show.add_argument("name")
     p_setkey = sub.add_parser("set-key", help="只换密钥（stdin）")
@@ -814,7 +860,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command in (
-            "add", "use", "rm", "list", "migrate", "show", "set-key", "set-url",
+            "add", "use", "rm", "list", "migrate", "show", "set-key", "set-url", "audit",
             "set-protocol", "rename", "export", "import",
         ):
             return _manage(args)

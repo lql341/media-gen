@@ -107,5 +107,17 @@ check "rm --all 后只剩 legacy 回退档" "legacy" "$("$PY" "$CFG" list)"
 if "$PY" "$CFG" list | grep -q "primary"; then echo "FAIL  rm --all 后仍能看到 primary"; fail=1; else echo "ok    rm --all 后 primary 已消失"; fi
 
 
+echo "== 删除闸门：默认绝不删凭据库条目"
+out=$(MEDIA_ALLOW_CREDENTIAL_DELETE= "$PY" "$CFG" audit 2>&1)
+check "audit 显示默认不删" "未设置（默认不删）" "$out"
+printf 'gate-key-1234567890' | "$PY" "$CFG" add gatecheck --protocol openai \
+  --base-url https://gate.example/v1 --store file --key-stdin >/dev/null
+out=$(MEDIA_ALLOW_CREDENTIAL_DELETE= "$PY" "$CFG" rm gatecheck 2>&1 || true)
+check "rm 提示密钥保留" "密钥保留" "$out"
+if printf '%s' "$out" | grep -q "已删除配置档 gatecheck"; then echo "ok    配置本身仍被删除"; else echo "FAIL  配置应被删除"; fail=1; fi
+if [ "$(printf '%s' "$out" | grep -c "delete-generic-password")" -gt 0 ]; then
+  echo "ok    只打印手工命令，未执行删除"
+fi
+
 echo
 if [ "$fail" = 0 ]; then echo "全部通过"; else echo "有失败项"; exit 1; fi

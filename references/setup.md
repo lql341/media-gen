@@ -98,6 +98,23 @@ environment variables there.
 each access (`store: read media-gen/litellm via macOS Keychain`) so you can audit it. The test suite
 runs with `none` and asserts zero keyring operations.
 
+## Deleting secrets is opt-in (default: never)
+
+`setup.sh rm` removes the **configuration**, not your secret. Deleting the credential-store item
+requires an explicit gate:
+
+```bash
+MEDIA_ALLOW_CREDENTIAL_DELETE=1 scripts/setup.sh rm <name>
+# or do it yourself:
+security delete-generic-password -s media-gen -a <name>      # macOS
+secret-tool clear service media-gen account <name>            # Linux
+```
+
+`scripts/setup.sh audit` is read-only and prints exactly which store items the tool could touch, the
+exact command for each, whether the gate is set, and whether the legacy `seedance-gateway` item
+exists (it is never deleted by this tool). No command ever deletes by service name alone — the
+account is always part of the query, so one profile can never remove another.
+
 ## Security notes
 
 - The CLI sends `Authorization` from Python (never through argv or shell history), and only to the
@@ -105,5 +122,7 @@ runs with `none` and asserts zero keyring operations.
 - `media_config.py` never puts a key value in an exception message; pasted `export …` lines and
   whole `Authorization:` headers are rejected rather than stored.
 - `--store file` exists for machines without a keyring; it prints a warning and stays `0600`.
+- Deleting a secret is refused unless `MEDIA_ALLOW_CREDENTIAL_DELETE=1`; the CLI prints the exact
+  command instead of running it. The test suite asserts that it performs no store deletes at all.
 - No command ever prompts for the keyring interactively: `security`/`secret-tool` are called
   non-interactively and failures degrade to "no key" rather than a modal dialog.

@@ -6,7 +6,7 @@
 #
 #   .\scripts\setup.ps1                         interactive wizard
 #   .\scripts\setup.ps1 add <name> --protocol openai --base-url https://host/v1
-#   .\scripts\setup.ps1 list | show <name> | status | doctor
+#   .\scripts\setup.ps1 list | show <name> | audit | status | doctor
 #   .\scripts\setup.ps1 set-url <name> --base-url https://host/v1
 #   .\scripts\setup.ps1 set-key <name>          (key on stdin, never in argv)
 #   .\scripts\setup.ps1 rename <old> <new> | rm <name> | rm --all
@@ -59,11 +59,11 @@ switch ($action) {
     'set-key'     { & $exe @pre $config set-key @($Args | Select-Object -Skip 1); break }
     'set-url'     { & $exe @pre $config set-url @($Args | Select-Object -Skip 1); break }
     'set-protocol'{ & $exe @pre $config set-protocol @($Args | Select-Object -Skip 1); break }
-    { $_ -in @('list', 'show', 'rm', 'rename', 'use', 'export', 'import', 'migrate') } {
+    { $_ -in @('list', 'show', 'audit', 'rm', 'rename', 'use', 'export', 'import', 'migrate') } {
         & $exe @pre $config $action @($Args | Select-Object -Skip 1); break
     }
     default {
-        Write-Host '用法：setup.ps1 [add|custom|modify|list|show|status|doctor|set-url|set-key|set-protocol|rename|rm|export|import|migrate|mcp]'
+        Write-Host '用法：setup.ps1 [add|custom|modify|list|show|audit|status|doctor|set-url|set-key|set-protocol|rename|rm|export|import|migrate|mcp]'
         Write-Host '不带参数进入交互向导。'
         exit 2
     }

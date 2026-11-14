@@ -55,7 +55,8 @@ Never conclude that a model "does not exist" because one endpoint lacks it: ask 
 | Configure by flags | `setup.sh add <name> --protocol <p> --base-url <URL>` (adds or updates) |
 | Inspect / verify | `setup.sh list|show|status|doctor` |
 | Change one thing | `setup.sh modify <name>` · `set-url` · `set-key` · `set-protocol` · `rename` |
-| Remove | `setup.sh rm <name> [--keep-key]` · `rm --all` |
+| Remove (config only) | `setup.sh rm <name>` · `rm --all` — secrets are never deleted unless `MEDIA_ALLOW_CREDENTIAL_DELETE=1` |
+| Audit the store | `setup.sh audit` (read-only: which items, which exact commands, is the delete gate set) |
 | Move configuration | `setup.sh export` / `import <file>` (no secrets) · `migrate` (from seedance) |
 | What can this endpoint do? | `media.py models [--kind image|video] [--json]` |
 | Text to image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [-o out.png]` |

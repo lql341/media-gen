@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.1 - 2026-11-14
+
+Safety fix: nothing deletes a stored secret by default any more.
+
+- `setup.sh rm` / `rm --all` now remove **configuration only**. Deleting the credential-store item
+  requires `MEDIA_ALLOW_CREDENTIAL_DELETE=1`; otherwise the CLI prints the exact
+  `security delete-generic-password -s media-gen -a <name>` command and keeps the secret.
+- New read-only `setup.sh audit`: profiles, whether a store item exists for each, the exact delete
+  command, the current `MEDIA_CREDENTIAL_STORE` mode, and whether the delete gate is open. The legacy
+  `seedance-gateway` item is listed as read-only and is never removed by this tool.
+- Deletion always addresses `-s SERVICE -a ACCOUNT`; there is no service-only delete path, so one
+  profile cannot remove another (or an unrelated item).
+- Tests: `test-config.sh` asserts the gate behaviour, and `tests/run-all.sh` asserts the whole suite
+  performs zero credential-store deletions and zero writes.
+- Docs: setup/troubleshooting/SKILL document the gate, the audit command and the manual one-liners.
+
 ## 0.4.0 - 2026-11-14
 
 Interactive, cross-platform, and reachable from GUI clients.
