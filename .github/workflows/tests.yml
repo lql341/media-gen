@@ -6,8 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+# 按 sha 分组：重跑老提交不会取消当前 main 的构建（按 ref 分组时会互踢）
 concurrency:
-  group: tests-${{ github.ref }}
+  group: tests-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 permissions:
