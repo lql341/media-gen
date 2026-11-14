@@ -30,7 +30,11 @@ start_server() {
     kill -0 "$SERVER_PID" 2>/dev/null || break
     sleep 0.1
   done
-  echo "mock server 未能启动（pid ${SERVER_PID}，日志：）" >&2
+  echo "mock server 未能启动（pid ${SERVER_PID}）" >&2
+  echo "--- python: $("$PY" -V 2>&1)" >&2
+  ps -p "$SERVER_PID" -o pid,stat,command >&2 2>/dev/null || echo "--- pid 已不存在" >&2
+  ls -la "$TMP" >&2 2>/dev/null || true
+  echo "--- server.log:" >&2
   cat "$TMP/server.log" >&2
   exit 1
 }
