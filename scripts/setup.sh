@@ -154,8 +154,9 @@ main() {
     reset)  do_reset ;;
     new|modify)
       if [ "$KEY_FROM_AGENT" = no ] && [ "$KEY_STDIN" = no ] && [ -n "${SEEDANCE_API_KEY:-}${LEGACY_API_KEY:-}" ]; then
-        printf '检测到环境变量里的密钥：只写入未给的字段，随后可用 setup.sh status 复核。\n' >&2
-        write_config "$BASE_URL" "$MODEL"
+        # 已经有环境变量就直接落盘/入库，不必再问一遍；这之后环境变量仍然优先
+        printf '检测到环境变量里的密钥，正在 %s 模式下保存（之后可用 setup.sh status 复核来源）。\n' "$STORE" >&2
+        write_config "$BASE_URL" "$MODEL" "${SEEDANCE_API_KEY:-${LEGACY_API_KEY:-}}"
       else
         if [ "$KEY_STDIN" = no ] && [ "$KEY_FROM_AGENT" = no ] && [ -z "${SEEDANCE_API_KEY:-}${LEGACY_API_KEY:-}" ]; then
           need_tty
