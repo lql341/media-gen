@@ -61,7 +61,7 @@ labelled `unknown` and still usable with an explicit subcommand.
 | Accounts | several keys per endpoint (`<profile>@<alias>`, `--account`, `MEDIA_ACCOUNT`), no fallback between accounts |
 | Lifecycle | `add` (add or update), `modify`, `set-url`, `set-key`, `set-protocol`, `set-credential-ref`, `rename`, `show`, `export`/`import`, `rm`, `rm --account`, `rm --all` |
 | Legacy | reads `~/.config/seedance/config.json` + `seedance-gateway` item; `migrate --to <profile>` copies, `--delete-legacy` (gated) removes |
-| Secrets | env → `credential_ref` → `media-gen/<profile>[@alias]` → inline 0600 → agent-auth import; `MEDIA_CREDENTIAL_STORE=auto|file|none`, per-process cache, `MEDIA_DEBUG_STORE=1` |
+| Secrets | env → `credential_ref` → `media-gen/<profile>[@alias]` → inline 0600 → agent-auth import; `MEDIA_CREDENTIAL_STORE=auto\|file\|none`, per-process cache, `MEDIA_DEBUG_STORE=1` |
 | Safety | deletes require `MEDIA_ALLOW_CREDENTIAL_DELETE=1`; `audit` is read-only and never decrypts; deletions are always `-s service -a account` |
 | Entry points | `setup.sh` (macOS/Linux), `setup.ps1` (Windows PowerShell), `wizard.py` (interactive, cross-platform) |
 

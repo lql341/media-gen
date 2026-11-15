@@ -1,7 +1,7 @@
 # 真机验证 Runbook
 
-按顺序跑，**零成本的在前面**。每一步写清"通过长什么样"和它点亮 `docs/VERIFICATION.md` 矩阵里的哪一行。
-跑完请把结果写回矩阵，不要把金额/token 抄进文档（CLI 会打印网关自己的 `usage`）。
+按顺序执行；零成本步骤在前。每一步给出通过标准，以及它点亮 `docs/VERIFICATION.md` 矩阵中的哪一行。
+执行后请把结果写回矩阵；不要在文档中记录金额或 token 数（CLI 会打印端点自己的 `usage`）。
 
 ```bash
 cd <仓库根目录>
@@ -12,14 +12,14 @@ MODEL_I=gpt-image-1         # 换成你端点上实际的图片模型
 ```
 
 付费调用计数：`video` 1 次、`remix` 1 次、`extend` 1 次、`image` 1 次、`speech` 1 次。
-下面第 0–2 节总共只需要 **1 次**付费调用，其余全免费。
+第 0–2 节合计只需要 **1 次**付费调用，其余均为零成本。
 
 ---
 
 ## 0. 前置（免费）
 
 ```bash
-bash tests/run-all.sh                      # 先确认离线套件在本机是绿的
+bash tests/run-all.sh                      # 先确认离线套件通过
 scripts/setup.sh status                    # 配置档 + 密钥来源
 $MEDIA --profile $PROFILE doctor           # /models 可达、媒体模型清单
 $MEDIA --profile $PROFILE models --kind video
@@ -27,7 +27,7 @@ $MEDIA --profile $PROFILE models --kind video
 
 - [ ] `run-all.sh` 结尾 `全部通过`
 - [ ] `doctor` 打印 `结果 OK`
-- [ ] 记下 `models` 里真实存在的 image / video / speech / transcription 模型 id，后面要用
+- [ ] 记录 `models` 中实际存在的 image / video / speech / transcription 模型 id，后面要用
 
 ## 1. 零成本探针（一个付费请求都不发）
 
@@ -69,7 +69,7 @@ $MEDIA tasks --limit 5                    # 本地台账应能看到这条
 点亮的行：`text → video`、`status / wait`、`download + --last-frame`、`--json`、`local ledger`、
 `streamed download`。
 
-只建任务、不等待（`--create-only`，**再计费 1 次**；它的输出是裸 task id，不带 `--json`）：
+只建任务、不等待（`--create-only`，**再计费 1 次**；它只输出 task id，不输出 `--json`）：
 
 ```bash
 $MEDIA --profile $PROFILE video -p "draft" --model $MODEL_V -s 4 --create-only
@@ -111,7 +111,7 @@ $MEDIA --profile $PROFILE image -p "a cat" --model $MODEL_I -n 3 -o batch.png   
 
 ## 5. 语音（需要 speech / transcription deployment）
 
-先确认有没有权限（没权限会 `401 team not allowed`，零成本；**有权限就会真的合成并计费**）：
+先确认权限（无权限时返回 `401 team not allowed`，零成本；**有权限时会真实合成并计费**）：
 
 ```bash
 $MEDIA --profile $PROFILE speech -t hi --model tts-1 --dry-run   # 只打印计划，零成本
@@ -170,9 +170,9 @@ scripts/setup.sh audit                         # 只读，不解密
 
 ## 8. 收尾：把结果写回去
 
-1. `docs/VERIFICATION.md`：把对应行的 `⬜` 改成 `✅`，并把命令与观察结果补进上面的 live 表。
-2. 本文件：勾掉对应小节。
+1. `docs/VERIFICATION.md`：把对应行由 `⬜` 改为 `✅`，并把命令与观察结果补进 live 表。
+2. 本文件：勾选对应小节。
 3. 有配置/密钥变化时 `scripts/setup.sh export` 存档（不含密钥）。
 4. 公开前最后跑一次 `bash scripts/sanitize-check.sh`。
 
-不要记录：token 数、金额、完整任务 id、签名 URL、网关内部域名。
+不要记录：token 数、金额、完整任务 id、签名 URL、端点内部域名。

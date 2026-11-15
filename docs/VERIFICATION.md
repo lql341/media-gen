@@ -1,4 +1,4 @@
-# Verification record — macOS, real gateway (2026-11-14)
+# Verification record — macOS, real gateway (2026-11-14 … 2026-11-15)
 
 What was actually executed, and what is still simulated. Re-run any row with the command shown.
 Deliberately no token/cost figures: the CLI prints the gateway's own `usage` per run.
@@ -48,6 +48,23 @@ No image (other than `gemini-embedding-2`), speech or transcription deployment i
 key's team allowlist confirms it: requesting `gpt-image-1`, `wan*`, `MiniMax-Hailuo*`, `tts-1`,
 `whisper-1` returns the allowlist, which contains only chat models plus the two Seedance ids.
 
+## Live: diagnostics added in 0.10.0
+
+| # | Check | Command | Observed |
+| --- | --- | --- | --- |
+| 14 | capability gaps | `media.py doctor --gaps` | lists `video` as verifiable and `image` / `speech` / `transcription` as not (no deployment) |
+| 15 | key allowlist | `media.py models --access` | 53 models read from the 401 body with a single bogus POST; no task created |
+| 16 | gateway task list | `media.py list --model doubao-seedance-2-5` | gateway answers `400 LLM Provider NOT provided` (its list route drops `model`); CLI explains and points at `tasks` |
+| 17 | param planning | `media.py video … --param watermark=false --param seed=42 --dry-run` | plan shows `params: {watermark: false, seed: 42}` |
+| 18 | GET retry | one `doctor` run during a TLS handshake timeout | retried, then succeeded on the next invocation |
+
+## Live: two more zero-cost probes (0.10.x)
+
+| # | Check | Command | Observed |
+| --- | --- | --- | --- |
+| 19 | `/images/edits` route reachable | `media.py image -p … --model gpt-image-1 --image ref.png` | `POST /images/edits → 401 team not allowed` — multipart accepted, rejected on allowlist (not a format error), no charge |
+| 20 | `--param` really reaches the gateway | `media.py video … --param ratio=bogus_value` | `400 Unsupported ratio for this model` — passthrough proven without creating a task |
+
 ## Live: 0.13.x — create-only / wait timeout / `--json` / streamed download (2026-11-15)
 
 Same gateway (LiteLLM → Volcengine, video deployments only), minimum configuration 480p · 4s.
@@ -68,23 +85,6 @@ gateway's Python traceback body down to its exception line, so the message above
 
 `--last-frame` positive path is still mock-only: this deployment returns `last_frame_url: null`
 (row 7 behaviour re-confirmed — the CLI prints the hint and keeps the video).
-
-## Live: diagnostics added in 0.10.0
-
-| # | Check | Command | Observed |
-| --- | --- | --- | --- |
-| 14 | capability gaps | `media.py doctor --gaps` | lists `video` as verifiable and `image` / `speech` / `transcription` as not (no deployment) |
-| 15 | key allowlist | `media.py models --access` | 53 models read from the 401 body with a single bogus POST; no task created |
-| 16 | gateway task list | `media.py list --model doubao-seedance-2-5` | gateway answers `400 LLM Provider NOT provided` (its list route drops `model`); CLI explains and points at `tasks` |
-| 17 | param planning | `media.py video … --param watermark=false --param seed=42 --dry-run` | plan shows `params: {watermark: false, seed: 42}` |
-| 18 | GET retry | one `doctor` run during a TLS handshake timeout | retried, then succeeded on the next invocation |
-
-## Live: two more zero-cost probes (0.10.x)
-
-| # | Check | Command | Observed |
-| --- | --- | --- | --- |
-| 19 | `/images/edits` route reachable | `media.py image -p … --model gpt-image-1 --image ref.png` | `POST /images/edits → 401 team not allowed` — multipart accepted, rejected on allowlist (not a format error), no charge |
-| 20 | `--param` really reaches the gateway | `media.py video … --param ratio=bogus_value` | `400 Unsupported ratio for this model` — passthrough proven without creating a task |
 
 ## Simulated (code path exercised, no vendor involved)
 

@@ -2,68 +2,74 @@
 
 ## 0.13.2 - 2026-11-15
 
-真机验证 `--remix` / `--extend` 时发现的错误信息噪音，外加把验证结果记回文档。
+Gateway 500 bodies no longer reach the user as a Python traceback.
 
-- `error_message()` 不再把网关回传的 Python 栈整个打给用户：遇到
-  `Traceback (most recent call last)` 只保留前面的异常摘要（实测网关在未实现的路由上会返回整段栈）。
-- `docs/VERIFICATION.md`：新增第 21–27 条真机记录（`--create-only`、`wait` 超时、`--json` 成功路径、
-  流式下载、remix/extend 的上游失败），矩阵相应打勾。
-- `ROADMAP.md`：`--create-only` / `--json` / `wait` 超时移出待验证；`--remix` / `--extend` 与
-  恒为 `null` 的 `last_frame_url` 记为已知边界（上游问题，不是本地参数错）。
+- `error_message()` cuts the body at `Traceback (most recent call last)` and keeps the exception
+  summary. The gateway returns whole stacks for routes its provider adapter does not implement.
+- `docs/VERIFICATION.md` records live runs 21–27: `--create-only`, the `wait` timeout branch, the
+  `--json` success path, a streamed download over a signed TOS URL, and the failing
+  `--remix` / `--extend`.
+- `ROADMAP.md` removes those rows from "waiting on environment"; remix / extend and the always-null
+  `last_frame_url` are listed as known upstream boundaries.
 
 ## 0.13.1 - 2026-11-15
 
-首次 CI 跑出来的三个真问题。
+Three defects surfaced by the first CI run.
 
-- **Windows 上 Python 一输出中文就崩**（`mcp_server` 的 `initialize` 里有个 `…` 就直接
-  `UnicodeEncodeError`，整个 MCP 服务器起不来）：新增 `media_config.ensure_utf8_stdio()`，
-  `media.py` / `media_config.py` / `wizard.py` / `mcp_server.py` 四个入口在写任何输出前把
-  stdout/stderr 切到 UTF-8；重定向到 `StringIO` 时自动跳过。
-- **CI 的 macOS 任务起不来 mock server**：`test-cli.sh` 原来每个 0.1s 起一个 python 去解析端口日志
-  （冷启动的 runner 上等不到），改成 `mock_server.py --port-file` + 进程存活检查。
-- **矩阵里 python 3.9 在 ubuntu-latest 上不存在**（runner 已经升到 26.04）：3.9 固定跑
-  ubuntu-22.04，3.12 跑 ubuntu-latest / macos-latest。
+- **Windows: non-ASCII output aborted the process.** A single `…` in the MCP tool descriptions
+  raised `UnicodeEncodeError` and the server exited before answering `initialize`. New
+  `media_config.ensure_utf8_stdio()` is called by all four entry points (`media.py`,
+  `media_config.py`, `wizard.py`, `mcp_server.py`) and is a no-op when stdout is a `StringIO`.
+- **The macOS job could not start the mock server.** `test-cli.sh` spawned one python every 0.1 s to
+  parse the port out of a log file; on a cold runner that window is too short. It now uses
+  `mock_server.py --port-file` plus a liveness check and waits up to 60 s.
+- **python 3.9 does not exist on `ubuntu-latest`** (the runner moved to 26.04): 3.9 is pinned to
+  `ubuntu-22.04`; 3.12 runs on `ubuntu-latest` and `macos-latest`.
 
 ## 0.13.0 - 2026-11-15
 
-视频不再整块进内存；第一次有 CI。
+Videos are streamed to disk instead of buffered in memory; first CI workflow.
 
-- **流式下载**：`Protocol.download(url, path)` 分块写 `<path>.part`，成功后 `os.replace` 到最终路径。
-  失败/中断不会留下半个 mp4 覆盖掉上一次的好文件；只在还没写入任何字节时才重试 5xx/429。
-- `Protocol.video_download(task_id, state, path)`：有直链的协议（ark / dashscope / minimax）直接流式落盘，
-  `openai` 优先拉 `/videos/<id>/content`，网关没这条路由再退回 `result.url`；只有字节的协议
-  （`custom` / `command`）退回 `video_fetch` + 原子写。
-- `write_artifact()` 改走同一个 `write_atomic()`，图片落盘也变成“要么完整、要么没有”。
-- **CI**（`.github/workflows/tests.yml`）：ubuntu/macos × python 3.9/3.12 跑 `tests/run-all.sh`，
-  Windows 任务跑纯 Python 的 registry + MCP 两套；全部离线，不产生费用。
+- `Protocol.download(url, path)` writes `<path>.part` in chunks and `os.replace`s it on success. An
+  interrupted transfer leaves no partial mp4 and never overwrites a good file; 5xx/429 are retried
+  only before the first byte is written.
+- `Protocol.video_download(task_id, state, path)`: protocols with a direct URL (ark, dashscope,
+  minimax) stream it; `openai` tries `/videos/<id>/content` first and falls back to `result.url`;
+  byte-only protocols (`custom`, `command`) fall back to `video_fetch` plus an atomic write.
+- `write_artifact()` goes through the same `write_atomic()`, so images are also complete-or-absent.
+- **CI** (`.github/workflows/tests.yml`): ubuntu/macos × python 3.9/3.12 run `tests/run-all.sh`; a
+  Windows job runs the pure-Python registry and MCP suites. Every job is offline.
 
 ## 0.12.0 - 2026-11-15
 
-MCP 通道补齐到与 CLI 同等的能力面（GUI 客户端读不到 SKILL.md，缺一个入参就是没法用）。
+The MCP surface now matches the CLI. A GUI client cannot read `SKILL.md`, so a missing argument is a
+missing feature.
 
-- **新增 `media_speech` / `media_transcribe`**：`/audio/speech` 与 `/audio/transcriptions` 以前只有 CLI
-  能调，GUI 用户完全够不到。
-- **`media_image` 补 `mask`**：`/images/edits` 的遮罩参数之前没透传。
-- **`media_video` 补 `remix` / `extend` / `last_frame`**：同样的 CLI 能力，工具层缺失。
-- **`media_task {action:"download"}` 补 `last_frame`**。
-- **`--last-frame` 在 `--remix` / `--extend` 分支被静默忽略**（CLI 同样的问题）：尾帧保存抽成
-  `save_last_frame()`，三处（普通视频 / remix / download）共用，不再各写一份。
-- `media_models` 的 `kind` 枚举补上 `speech` / `transcription`。
-- 文档同步：`SKILL.md`、`CAPABILITIES.md`、`references/gui-clients.md`、两份 README 的“five tools”都改成 7 个。
+- **New `media_speech` / `media_transcribe`**: `/audio/speech` and `/audio/transcriptions` were
+  reachable from the CLI only.
+- **`media_image` gains `mask`**: the `/images/edits` mask was not passed through.
+- **`media_video` gains `remix` / `extend` / `last_frame`**; `media_task {action:"download"}` gains
+  `last_frame`.
+- **`--last-frame` was silently ignored on the `--remix` / `--extend` branch**: last-frame saving is
+  now one helper (`save_last_frame()`) shared by plain video, remix and download.
+- `media_models` accepts `speech` / `transcription` in `kind`.
+- Docs (`SKILL.md`, `CAPABILITIES.md`, `references/gui-clients.md`, both READMEs) updated from five
+  tools to seven.
 
 ## 0.11.3 - 2026-11-15
 
-三个真行为修复，都是“明明会出错却静默”的那种。
+Three defects that failed silently instead of reporting an error.
 
-- **`wait` 多任务时一个失败不再吞掉其他结果**：之前 `[_state_dict(f.result()) for f in futures]`
-  碰到第一个异常就整体中断，其余任务已经等到的 URL/用量全丢。现在逐任务收集，输出仍含成功的
-  那些，stderr 说明哪几个没等到，退出码 1。
-- **`-o` 支持 `~`**：`-o ~/x.png` 之前会在当前目录建一个名为 `~` 的目录（`--image` / `--mask` /
-  `--last-frame` 都是展开的，只有输出路径漏了）。新增 `out_path()` 统一处理。
-- **MCP 的 `error` 字段给出真实原因**：之前只是 `str(SystemExit)`，也就是 `"1"`/`"2"`，报错信息
-  埋在 `log` 里。现在取 `die()` 写到 stderr 的 `error:` 那行。
-- 删掉 `tests/test_protocols.py` 里 5 个同名重复定义（同名覆盖，前一份从不执行）——−72 行。
-- `tests/mock_server.py`：任务 id 含 `fail` 时固定返回失败，用于上面的多任务用例。
+- **`wait` with several ids no longer discards the successes** when one task fails: the list
+  comprehension aborted on the first exception and lost the URLs and usage of the rest. Results are
+  now collected per task, successes are still printed, failures are named on stderr, exit code 1.
+- **`-o` expands `~`**: `-o ~/x.png` created a directory literally named `~`, while `--image`,
+  `--mask` and `--last-frame` already expanded. New `out_path()`.
+- **MCP `error` carries the message**: it was `str(SystemExit)`, i.e. `"1"` / `"2"`, with the reason
+  buried in `log`. It now takes the `error:` line `die()` wrote to stderr.
+- Removed five duplicated methods in `tests/test_protocols.py` (same name defined twice, the first
+  never ran; −72 lines).
+- `tests/mock_server.py`: a task id containing `fail` always fails, which the multi-task test needs.
 
 ## 0.11.2 - 2026-11-15
 
@@ -153,7 +159,7 @@ The whole A–C backlog: diagnostics, remix/extend, plumbing, Azure, retries, le
 
 macOS verification sweep, plus two small correctness fixes.
 
-- `download <id> out --last-frame f.png`: fetch the尾帧 for an existing task (0 cost); when the
+- `download <id> out --last-frame f.png`: fetch the last frame for an existing task (0 cost); when the
   gateway returns `last_frame_url: null` it says so instead of failing.
 - 403 `team not allowed to access model` now carries a hint: it is an allowlist problem, not a missing
   model — run `media.py models` or ask the gateway operator.

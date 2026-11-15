@@ -100,7 +100,7 @@ suite runs with `none` and asserts zero keyring operations.
 
 | Goal | Command |
 | --- | --- |
-| discover | `media.py models [--kind image|video] [--json]` |
+| discover | `media.py models [--kind image\|video] [--json]` |
 | pick an account | `media.py --profile <name>@<alias> …` or `--account <alias>` / `MEDIA_ACCOUNT` |
 | image | `media.py image -p "<prompt>" --model M [--size 1024x1024] [-n N] [--image ref.png --mask m.png] [-o out.png]` (batch → `out-1.png`, …) |
 | speech | `media.py speech -t "<text>" --model tts-1 [--voice alloy] [--format mp3] [-o out.mp3]` |
@@ -151,7 +151,7 @@ ROADMAP.md                     已完成 / 待验证（等环境）/ 待开发�
 bash tests/run-all.sh
 ```
 
-Seven suites, all offline (145 assertions): registry unit tests, protocol adapters against a scripted
+Seven suites, all offline: registry unit tests, protocol adapters against a scripted
 mock server (create → poll → download, request bodies inspected), configuration/credential
 precedence in a temp `HOME`, the interactive wizard (piped answers), the MCP server over stdio,
 platform branches with shimmed `secret-tool` / Windows, and CLI end-to-end through the mock. No network, no account, no spend, **and no keyring access**
@@ -168,6 +168,10 @@ bash scripts/sanitize-check.sh     # 本机路径 / 私有网关域名 / 厂商�
 
 The check is also the last step of `tests/run-all.sh`, so a green test run means nothing in the tree
 needs redacting.
+
+## Migration
+
+Moving from the seedance-only skill (config + credential import): see [MIGRATION.md](MIGRATION.md).
 
 ## License
 

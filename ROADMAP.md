@@ -1,7 +1,7 @@
 # 已完成 / 待验证 / 待开发
 
-三件事分开记：**已完成**（已发布，别再当待办）、**待验证**（代码已写，等环境）、**待开发**（还没写）。
-待验证不要因为"测过了"就划掉——mock 通过不等于对过真实厂商。
+分三类：**已完成**（已发布，不应再列为待办）、**待验证**（代码已实现，等待环境）、**待开发**（尚未实现）。
+待验证项不因 mock 通过而划掉：mock 通过不等于对过真实厂商。
 
 ## 一、已完成（最近三个版本，已发布）
 
@@ -12,7 +12,7 @@
 | 0.11.3 | `wait` 多任务失败隔离；`-o` 展开 `~`；MCP `error` 给出真实原因 |
 | 0.12.0 | MCP 补齐 `speech` / `transcribe` / `mask` / `remix` / `extend` / `last_frame`；`--last-frame` 在 remix 分支不再被静默忽略 |
 | 0.13.0 | 视频流式下载（`.part` → 原子替换）、`write_artifact` 原子写、首个 CI |
-| 0.13.1 | Windows UTF-8 输出（MCP 在 cp1252 上原本直接崩）、CI 矩阵与冷启动、`docs/RUNBOOK.md` |
+| 0.13.1 | Windows UTF-8 输出（MCP 在 cp1252 上无法启动）、CI 矩阵与冷启动处理、`docs/RUNBOOK.md` |
 
 ## 二、待验证（代码已实现，等环境）
 
@@ -28,8 +28,8 @@
 
 ### 需要花一次钱（用最小配置 480p · 4s，金额与 tokens 由端点的 `usage` 打印，不记在这里）
 
-`--create-only`、`--json`、`wait` 超时分支已于 0.13.x 真机验过（见 `docs/VERIFICATION.md` 第 21–25 条），
-只剩下面两条——代码路径通过，但**本网关的上游不支持**，要换端点才能验：
+`--create-only`、`--json`、`wait` 超时分支已于 0.13.x 真机验证（`docs/VERIFICATION.md` 第 21–25 条）。
+以下两条代码路径可用，但本网关的上游不支持，需要更换端点才能验证：
 
 | 项 | 现状 | 验证方式 |
 | --- | --- | --- |
@@ -75,10 +75,10 @@
 - 网关的任务列表路由可能丢参数（本机实测如此）→ 用本地台账 `media.py tasks`。
 - 首帧图在 LiteLLM→火山链路上必须是公网 URL，且 `ratio=adaptive`（实测）。
 - 删除密钥必须显式 `MEDIA_ALLOW_CREDENTIAL_DELETE=1`；`audit` 只读不解密。
-- **`--remix` / `--extend` 在本网关走不通**（实测）：前者上游直接 `NotImplemented`，后者上游
+- **`--remix` / `--extend` 在本网关不可用**（实测）：前者由上游直接抛 `NotImplemented`，后者上游
   `transform_video_extension_request()` 多收了一个 `model`。请求体本身没错
-  （remix `{prompt}`、extend `{video_id, prompt, seconds}`），是网关侧的问题。
-- 本网关的 Seedance 部署 `result.last_frame_url` 恒为 `null`：`--last-frame` 的正向路径只能在 mock 上验。
+  （remix `{prompt}`、extend `{video_id, prompt, seconds}`），问题在网关侧。
+- 本网关的 Seedance 部署 `result.last_frame_url` 恒为 `null`：`--last-frame` 的成功路径只能由 mock 覆盖。
 
 ## 五、怎么用这张表
 
@@ -91,4 +91,4 @@ media.py models --access     # 这把 key 实际能用什么（零花费）
 bash tests/run-all.sh        # 离线回归（零花费、零凭据库操作）
 ```
 
-打勾后请更新 `docs/VERIFICATION.md` 的矩阵，并把命令与结果一起记进去——那张表是"验证过"的唯一凭据。
+打勾后请更新 `docs/VERIFICATION.md` 的矩阵，并把命令与结果一并记录；该表是"已验证"的唯一凭据。

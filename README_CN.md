@@ -23,12 +23,13 @@ scripts/media.py video -p "雨夜霓虹街道，缓慢推镜" --model doubao-see
 
 ## 协议
 
-| 协议 | 端点形态 | 图片 | 视频 |
-| --- | --- | --- | --- |
-| `openai` | OpenAI 兼容 / LiteLLM | `/images/generations` | `/videos` + 轮询 |
-| `ark` | `https://ark.cn-beijing.volces.com/api/v3` | `/images/generations` | `/contents/generations/tasks` |
-| `dashscope` | `https://dashscope.aliyuncs.com/api/v1` | 异步任务 | 异步任务 |
-| `minimax` | `https://api.minimaxi.com/v1` | `/image_generation` | `/video_generation`（取文件两跳） |
+| 协议 | 端点形态 | 图片 | 视频 | 说明 |
+| --- | --- | --- | --- | --- |
+| `azure` | `https://<res>.openai.azure.com` | deployment 路径 + `api-key` | —（无视频路由） | 支持 speech / transcribe |
+| `openai` | OpenAI 兼容 / LiteLLM | `/images/generations` | `/videos` + 轮询 | 网关场景下最稳妥 |
+| `ark` | `https://ark.cn-beijing.volces.com/api/v3` | `/images/generations` | `/contents/generations/tasks` | Seedance 视频、Seedream 图片 |
+| `dashscope` | `https://dashscope.aliyuncs.com/api/v1` | 异步任务 | 异步任务 | Wan 系列，尺寸用 `1024*1024` |
+| `minimax` | `https://api.minimaxi.com/v1` | `/image_generation` | `/video_generation`（取文件两跳） | Hailuo，时长是枚举 |
 | `custom` | 任何 REST | 模板 | 模板 | 用一个 JSON 文件描述自家接口的字段形状 |
 | `command` | 任意 | 钩子脚本 | 钩子脚本 | 脚本用 stdin/stdout 交换 JSON |
 
@@ -94,7 +95,7 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 
 | 目的 | 命令 |
 | --- | --- |
-| 看能生成什么 | `media.py models [--kind image|video]` |
+| 看能生成什么 | `media.py models [--kind image\|video]` |
 | 图片编辑 | `media.py image -p "<提示词>" --model M --image 参考图.png [--mask 遮罩.png] -o out.png` |
 | 语音合成 | `media.py speech -t "<文本>" --model tts-1 [--voice alloy] [--format mp3] -o out.mp3` |
 | 语音转写 | `media.py transcribe -f audio.mp3 --model whisper-1 [--language zh] -o out.txt` |
@@ -108,10 +109,10 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 | 诊断 | `media.py doctor --gaps` · `media.py models --access` |
 | 不花钱 | 加 `--dry-run` |
 
-## 目录与测试
+## 测试与相关文档
 
 ```bash
-bash tests/run-all.sh     # 七套离线测试（145 条断言）：registry 单测、六种协议 mock、
+bash tests/run-all.sh     # 七套离线测试：registry 单测、六种协议 mock、
                           # 配置优先级与生命周期、交互向导（管道驱动）、MCP server（stdio）、
                           # 平台分支（secret-tool shim / Windows）、CLI 端到端；零凭据库访问
 ```
@@ -129,6 +130,14 @@ CI 在 ubuntu 22.04（python 3.9）、ubuntu-latest 与 macos-latest（python 3.
 ## 迁移
 
 从只支持 seedance 的旧技能升级：见 [MIGRATION.md](MIGRATION.md)。
+
+## 发布前
+
+```bash
+bash scripts/sanitize-check.sh     # 本机路径 / 私有网关域名 / 厂商内部 id / 任务 id / 密钥形态 / 计费数字
+```
+
+该检查同时是 `tests/run-all.sh` 的最后一步，因此测试全绿即表示工作区无需脱敏的内容。
 
 ## 许可证
 
