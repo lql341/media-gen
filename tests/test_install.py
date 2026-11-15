@@ -52,9 +52,13 @@ def expected_files() -> set[str]:
 
 
 def installed_files(root: str) -> set[str]:
+    """安装树里的文件；__pycache__ 是运行时副产物，不属于安装内容。"""
     found: set[str] = set()
-    for dirpath, _, files in os.walk(root):
+    for dirpath, dirnames, files in os.walk(root):
+        dirnames[:] = [name for name in dirnames if name != "__pycache__"]
         for name in files:
+            if name.endswith(".pyc"):
+                continue
             found.add(os.path.relpath(os.path.join(dirpath, name), root))
     return found
 
@@ -111,7 +115,8 @@ class InstallCopyTest(unittest.TestCase):
 
     def test_installed_copy_reports_the_same_version(self):
         env = dict(os.environ)
-        env.update(HOME=self.tmp.name, XDG_CONFIG_HOME=os.path.join(self.tmp.name, ".config"))
+        env.update(HOME=self.tmp.name, XDG_CONFIG_HOME=os.path.join(self.tmp.name, ".config"),
+                   PYTHONDONTWRITEBYTECODE="1")
         reply = subprocess.run(
             [sys.executable, os.path.join(self.dst, "scripts", "mcp_server.py")],
             input=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}) + "\n",
