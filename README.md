@@ -142,7 +142,7 @@ scripts/install.sh             install into an agent's skills directory
 scripts/seedance.sh            deprecated shim → media.py video
 tests/                         offline suites incl. a scripted mock server
 MIGRATION.md                   moving from the seedance-only skill
-ROADMAP.md                     待验证（等环境）与待开发（未实现）清单
+ROADMAP.md                     已完成 / 待验证（等环境）/ 待开发（未实现）三张清单
 ```
 
 ## Tests

@@ -1,9 +1,20 @@
-# 待验证与待开发
+# 已完成 / 待验证 / 待开发
 
-两件事分开记：**待验证**（代码已写，等环境）和**待开发**（还没写）。前者不要因为"测过了"就划掉——
-mock 通过不等于对过真实厂商。
+三件事分开记：**已完成**（已发布，别再当待办）、**待验证**（代码已写，等环境）、**待开发**（还没写）。
+待验证不要因为"测过了"就划掉——mock 通过不等于对过真实厂商。
 
-## 一、待验证（代码已实现，等环境）
+## 一、已完成（最近三个版本，已发布）
+
+| 版本 | 内容 |
+| --- | --- |
+| 0.11.1 | MCP `wait` 不再把任务 id 拆成字符；下载凭据按 scheme+host+port 判断同源 |
+| 0.11.2 | MCP `serverInfo.version` 从 `VERSION` 读，不再写死 |
+| 0.11.3 | `wait` 多任务失败隔离；`-o` 展开 `~`；MCP `error` 给出真实原因 |
+| 0.12.0 | MCP 补齐 `speech` / `transcribe` / `mask` / `remix` / `extend` / `last_frame`；`--last-frame` 在 remix 分支不再被静默忽略 |
+| 0.13.0 | 视频流式下载（`.part` → 原子替换）、`write_artifact` 原子写、首个 CI |
+| 0.13.1 | Windows UTF-8 输出（MCP 在 cp1252 上原本直接崩）、CI 矩阵与冷启动、`docs/RUNBOOK.md` |
+
+## 二、待验证（代码已实现，等环境）
 
 ### 需要带对应 deployment 的端点
 
@@ -15,7 +26,7 @@ mock 通过不等于对过真实厂商。
 | 语音合成 `/audio/speech` | mock + 401 白名单 | 挂了 speech deployment | `media.py speech -t … --model <id>` |
 | 语音转写 `/audio/transcriptions` | mock + 401 白名单 | 挂了 transcription deployment | `media.py transcribe -f a.mp3 --model <id>` |
 
-### 需要花一次钱（约 4 万 tokens / 次，480p·4s）
+### 需要花一次钱（用最小配置 480p · 4s，金额与 tokens 由端点的 `usage` 打印，不记在这里）
 
 | 项 | 现状 | 验证方式 |
 | --- | --- | --- |
@@ -45,7 +56,7 @@ mock 通过不等于对过真实厂商。
 | `custom` 模板 / `command` 钩子 | mock + 真实 shell 钩子通过，需自家接口 |
 | profile `--header` / `--query` | mock 通过，需一个会回显请求头的端点 |
 
-## 二、待开发（尚未实现）
+## 三、待开发（尚未实现）
 
 | 项 | 说明 | 优先级 |
 | --- | --- | --- |
@@ -58,14 +69,14 @@ mock 通过不等于对过真实厂商。
 | 声音克隆 / 多说话人 / 音乐生成 | 属于另一个技能的量级 | 不做 |
 | 音频输出格式转换（wav↔mp3） | 依赖 ffmpeg，暂不做 | 不做 |
 
-## 三、已知边界（不是缺陷）
+## 四、已知边界（不是缺陷）
 
 - 视频模型只有 video deployment：不能出现在 `/model` 选择器，也不能写进任何 `models.json`。
 - 网关的任务列表路由可能丢参数（本机实测如此）→ 用本地台账 `media.py tasks`。
 - 首帧图在 LiteLLM→火山链路上必须是公网 URL，且 `ratio=adaptive`（实测）。
 - 删除密钥必须显式 `MEDIA_ALLOW_CREDENTIAL_DELETE=1`；`audit` 只读不解密。
 
-## 四、怎么用这张表
+## 五、怎么用这张表
 
 按步骤复验：**[`docs/RUNBOOK.md`](docs/RUNBOOK.md)**（零成本探针在前，全套真机验证只需 1 次付费调用）。
 
