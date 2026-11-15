@@ -28,13 +28,13 @@
 
 ### 需要花一次钱（用最小配置 480p · 4s，金额与 tokens 由端点的 `usage` 打印，不记在这里）
 
+`--create-only`、`--json`、`wait` 超时分支已于 0.13.x 真机验过（见 `docs/VERIFICATION.md` 第 21–25 条），
+只剩下面两条——代码路径通过，但**本网关的上游不支持**，要换端点才能验：
+
 | 项 | 现状 | 验证方式 |
 | --- | --- | --- |
-| `--remix` | mock 通过 | 对一个已完成任务跑 `video -p … --remix <id> -s 4` |
-| `--extend` | mock 通过 | `video -p … --extend <id> -s 4` |
-| `--create-only` | mock 通过 | 建任务后立刻中断，确认后续 `status` 可续 |
-| `--json`（成功路径） | 仅 mock | 与上面任一条一起跑，检查字段 |
-| `wait` 超时分支 | 仅单测 | 用一个长任务 + `--timeout 30` |
+| `--remix` | 真机试过：网关回 `video remix is not supported for Volcengine video` | 换一个实现了 `POST /videos/<id>/remix` 的端点 |
+| `--extend` | 真机试过：上游 LiteLLM `transform_video_extension_request()` 不接受 `model` 入参 | 换端点，或等上游修复 |
 
 ### 需要换环境
 
@@ -75,6 +75,10 @@
 - 网关的任务列表路由可能丢参数（本机实测如此）→ 用本地台账 `media.py tasks`。
 - 首帧图在 LiteLLM→火山链路上必须是公网 URL，且 `ratio=adaptive`（实测）。
 - 删除密钥必须显式 `MEDIA_ALLOW_CREDENTIAL_DELETE=1`；`audit` 只读不解密。
+- **`--remix` / `--extend` 在本网关走不通**（实测）：前者上游直接 `NotImplemented`，后者上游
+  `transform_video_extension_request()` 多收了一个 `model`。请求体本身没错
+  （remix `{prompt}`、extend `{video_id, prompt, seconds}`），是网关侧的问题。
+- 本网关的 Seedance 部署 `result.last_frame_url` 恒为 `null`：`--last-frame` 的正向路径只能在 mock 上验。
 
 ## 五、怎么用这张表
 

@@ -48,6 +48,27 @@ No image (other than `gemini-embedding-2`), speech or transcription deployment i
 key's team allowlist confirms it: requesting `gpt-image-1`, `wan*`, `MiniMax-Hailuo*`, `tts-1`,
 `whisper-1` returns the allowlist, which contains only chat models plus the two Seedance ids.
 
+## Live: 0.13.x — create-only / wait timeout / `--json` / streamed download (2026-11-15)
+
+Same gateway (LiteLLM → Volcengine, video deployments only), minimum configuration 480p · 4s.
+
+| # | Capability | Command | Result | Cost |
+| --- | --- | --- | --- | --- |
+| 21 | `--create-only` | `video -p … -s 4 --ratio 16:9 --resolution 480p --create-only` | ✅ returns a bare task id immediately, no download, no wait | billed |
+| 22 | `wait` timeout branch | `wait <id> --timeout 0` (task still running) | ✅ exit 1, `等待超时（0s）… 可稍后 status/wait` | 0 |
+| 23 | resume an existing task | `status <id>` / `wait <id>` | ✅ `completed`, `seconds=4`, `size=854x480` | 0 |
+| 24 | `--json` success path | `video … --json --last-frame last.png -o json-run.mp4` | ✅ one-line JSON with `ok / task_id / file / usage` | billed |
+| 25 | streamed download | the same run (gateway returns a TOS signed URL) | ✅ `.part` → atomic rename, 1.98 MB; the foreign-host URL received **no** `Authorization` | 0 |
+| 26 | `--remix` | `video -p … --remix <id> -s 4` | ❌ gateway `APIConnectionError: video remix is not supported for Volcengine video` | 0 |
+| 27 | `--extend` | `video -p … --extend <id> -s 4` | ❌ gateway `TypeError: …transform_video_extension_request() got an unexpected keyword argument 'model'` | 0 |
+
+26 and 27 are **upstream** defects, not local: the request bodies carry no `model`
+(`{"prompt"}` for remix, `{"video_id","prompt","seconds"}` for extend). Since 0.13.2 the CLI strips the
+gateway's Python traceback body down to its exception line, so the message above is all the user sees.
+
+`--last-frame` positive path is still mock-only: this deployment returns `last_frame_url: null`
+(row 7 behaviour re-confirmed — the CLI prints the hint and keeps the video).
+
 ## Live: diagnostics added in 0.10.0
 
 | # | Check | Command | Observed |
@@ -105,9 +126,10 @@ key's team allowlist confirms it: requesting `gpt-image-1`, `wan*`, `MiniMax-Hai
 | batch images (`-n N`) | M | ⬜ | same |
 | speech (`/audio/speech`) | M | ⬜ (401 allowlist) | no speech deployment |
 | transcription (`/audio/transcriptions`) | M | ⬜ (401 allowlist) | no transcription deployment |
-| remix / extend | M | ⬜ | would create a billable task |
-| `--create-only` | M | ⬜ | creates a billable task |
-| `--json` (image / video / list) | M | ⬜ | needs a successful call |
+| remix / extend | L (attempted) | ❌ | upstream: Volcengine remix unsupported; LiteLLM extension transform rejects `model` |
+| `--create-only` | L | ✅ | — |
+| `--json` (video) | L | ✅ | — |
+| `--json` (image / list) | M | ⬜ | image needs a deployment |
 | profile `--header` / `--query` | M | ⬜ | needs an endpoint that echoes them |
 | `azure` protocol | M | ⬜ | needs an Azure resource |
 | `ark` / `dashscope` / `minimax` native | M | ⬜ | needs those API keys |
@@ -115,7 +137,8 @@ key's team allowlist confirms it: requesting `gpt-image-1`, `wan*`, `MiniMax-Hai
 | MCP server with a GUI client | M | ⬜ | needs WorkBuddy / DSH Desktop |
 | Linux keyring (`secret-tool`) | M (simulated) | ⬜ | needs a Linux box |
 | Windows (`setup.ps1`, no keyring) | M + CI (real Windows: registry, MCP) | ⬜ | `setup.ps1` and the bash suites still need a Windows box |
-| streamed download (`.part` → atomic rename) | M | ✅ | mock: chunked write, no leftovers on 404 |
+| streamed download (`.part` → atomic rename) | L | ✅ | live: 1.98 MB over a signed TOS URL |
+| `wait` timeout branch | L | ✅ | exit 1 + resume hint, task keeps running |
 | `/videos/edits`, `/videos/characters`, `/images/variations` | – | — | not implemented (routes exist upstream) |
 | native vendor TTS/STT for ark/dashscope/minimax | – | — | deliberate; use `custom`/`command` |
 | parallel *generation* (not just waiting) | – | — | not implemented |

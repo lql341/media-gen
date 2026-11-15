@@ -364,6 +364,10 @@ def error_message(payload: dict, raw: bytes = b"") -> str:
             if value:
                 return str(value)
     text = raw.decode("utf-8", "replace").strip()
+    # 网关把后端 Python 栈整个回给我们时，只留第一段（异常摘要），不要把栈帧塞给用户
+    traceback_at = text.find("\nTraceback (most recent call last)")
+    if traceback_at > 0:
+        text = text[:traceback_at].strip()
     return text[:400] if text else "（响应无正文）"
 
 

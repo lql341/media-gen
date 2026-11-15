@@ -597,6 +597,21 @@ class ErrorShapeTest(unittest.TestCase):
                 protocol._json("GET", "/no-such-route")
             self.assertIn("no route", str(raised.exception).lower())
 
+    def test_gateway_traceback_is_cut_to_the_exception_line(self):
+        # 真实网关（LiteLLM→现状）在未实现的路由上会把整个 Python 栈写进响应体
+        from protocols import error_message
+
+        raw = (
+            b"APIConnectionError: video remix is not supported for Volcengine video\n"
+            b"Traceback (most recent call last):\n"
+            b'  File "/app/.venv/lib/python3.13/site-packages/litellm/videos/main.py", line 769\n'
+            b"NotImplementedError: video remix is not supported for Volcengine video"
+        )
+        message = error_message({}, raw)
+        self.assertIn("not supported", message)
+        self.assertNotIn("Traceback", message)
+        self.assertNotIn("site-packages", message)
+
     def test_unknown_protocol(self):
         with self.assertRaises(MediaError):
             load_protocol("smtp")

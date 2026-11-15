@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.2 - 2026-11-15
+
+真机验证 `--remix` / `--extend` 时发现的错误信息噪音，外加把验证结果记回文档。
+
+- `error_message()` 不再把网关回传的 Python 栈整个打给用户：遇到
+  `Traceback (most recent call last)` 只保留前面的异常摘要（实测网关在未实现的路由上会返回整段栈）。
+- `docs/VERIFICATION.md`：新增第 21–27 条真机记录（`--create-only`、`wait` 超时、`--json` 成功路径、
+  流式下载、remix/extend 的上游失败），矩阵相应打勾。
+- `ROADMAP.md`：`--create-only` / `--json` / `wait` 超时移出待验证；`--remix` / `--extend` 与
+  恒为 `null` 的 `last_frame_url` 记为已知边界（上游问题，不是本地参数错）。
+
 ## 0.13.1 - 2026-11-15
 
 首次 CI 跑出来的三个真问题。
