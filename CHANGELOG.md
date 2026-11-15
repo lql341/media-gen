@@ -10,7 +10,7 @@ Internal layering only; CLI and MCP behaviour are unchanged.
   or redirects stdout — the mismatch behind the 0.11.1 `media_task wait` failure cannot recur.
 - **`media_config.py` split into `scripts/mediaconfig/`**: `paths` (files, validation), `profiles`
   (defaults, accounts, legacy import), `store` (credential store, deletion gate), `probe` (`/models`),
-  `cli` (`add` / `show` / `rm` / `export` / `migrate`). `media_config.py` remains a 23-line façade,
+  `cli` (`add` / `show` / `rm` / `export` / `migrate`). `media_config.py` remains a 19-line façade,
   so existing imports and every `setup.sh` entry point are unchanged.
 - **`install.sh --copy` reads `scripts/install-manifest.txt`** instead of a hand-written list and
   fails when an entry matches no file. `tests/test_install.py` compares the installed tree against
