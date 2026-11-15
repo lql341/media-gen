@@ -129,12 +129,14 @@ references/providers.md        per-provider quirks + verification status
 references/custom-endpoints.md  custom templates + command hooks for in-house APIs
 references/interactive.md      wizard flows, cross-platform entry points, credential-store switch
 references/gui-clients.md      MCP server for WorkBuddy / DSH / Claude Desktop / CodeBuddy
+scripts/api.py                 in-process API shared by the CLI and the MCP server
+scripts/mediaconfig/           paths / profiles / credential store / probe / CLI
 scripts/wizard.py              interactive setup (stdlib, getpass, Windows-safe)
 scripts/mcp_server.py          stdio MCP server: profiles/models/image/video/task/speech/transcribe
 scripts/setup.ps1              PowerShell entry point
 references/troubleshooting.md  full error table
 scripts/media.py               CLI: models / image / video / run / status / wait / download / doctor
-scripts/media_config.py        profiles + credentials (status/add/use/rm/migrate)
+scripts/media_config.py        façade + CLI entry over mediaconfig/
 scripts/registry.py|.json      capability registry and normalisation
 scripts/protocols/             openai · ark · dashscope · minimax
 scripts/setup.sh               configuration panel
@@ -151,10 +153,11 @@ ROADMAP.md                     已完成 / 待验证（等环境）/ 待开发�
 bash tests/run-all.sh
 ```
 
-Seven suites, all offline: registry unit tests, protocol adapters against a scripted
-mock server (create → poll → download, request bodies inspected), configuration/credential
-precedence in a temp `HOME`, the interactive wizard (piped answers), the MCP server over stdio,
-platform branches with shimmed `secret-tool` / Windows, and CLI end-to-end through the mock. No network, no account, no spend, **and no keyring access**
+Eight suites, all offline: registry unit tests, protocol adapters against a scripted mock server
+(create → poll → download, request bodies inspected), configuration/credential precedence in a temp
+`HOME`, the interactive wizard (piped answers), the MCP server over stdio, the `--copy` install
+manifest, platform branches with shimmed `secret-tool` / Windows, and CLI end-to-end through the
+mock. No network, no account, no spend, **and no keyring access**
 (`MEDIA_CREDENTIAL_STORE=none`, asserted). CI runs the same script on ubuntu 22.04
 (python 3.9), ubuntu-latest and macos-latest (python 3.12), plus a Windows job for the pure-Python
 suites — every job is offline, so a green build costs nothing and proves nothing was sent to a paid

@@ -24,18 +24,16 @@ No third-party dependencies; the server never prints keys.
 
 from __future__ import annotations
 
-import io
 import json
 import os
 import sys
-from contextlib import redirect_stderr, redirect_stdout
-from types import SimpleNamespace
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import media as cli  # noqa: E402
+import api  # noqa: E402
 import media_config as config  # noqa: E402
+from protocols import MediaError  # noqa: E402
 
 def read_version() -> str:
     """版本只以仓库根目录的 VERSION 为准，避免这里写死的常量再次过期。"""
@@ -50,47 +48,23 @@ SERVER_INFO = {"name": "media-gen", "version": read_version()}
 PROTOCOL_VERSION = "2024-11-05"
 
 
-def _args(**kwargs):
-    base = {
-        "profile": os.environ.get("MEDIA_PROFILE") or None,
-        "timeout_seconds": 120,
-        "verbose": False,
-        "dry_run": False,
-        "param": [],
-        "json": False,
-    }
-    base.update(kwargs)
-    return SimpleNamespace(**base)
+def _envelope(ok: bool, result=None, error: str | None = None, log: list[str] | None = None) -> dict:
+    payload: dict = {"ok": ok}
+    if result is not None:
+        payload["result"] = result
+    if error is not None:
+        payload["error"] = error
+    if log:
+        payload["log"] = "\n".join(log).strip()
+    return payload
 
 
-def _capture(func, args) -> dict:
-    """Run a CLI command, keep stdout (the result) and stderr (the log) apart."""
-    out_buffer, err_buffer = io.StringIO(), io.StringIO()
-    try:
-        with redirect_stdout(out_buffer), redirect_stderr(err_buffer):
-            func(args)
-    except SystemExit as exit_error:  # die() raises this
-        lines = [line for line in err_buffer.getvalue().strip().splitlines() if line.strip()]
-        # die() 先把原因打到 stderr 再 raise，str(SystemExit) 只有退出码（"1"）
-        detail = next(
-            (line.split(":", 1)[1].strip() for line in reversed(lines) if line.startswith("error:")),
-            "",
-        )
-        return {
-            "ok": False,
-            "error": detail or (lines[-1] if lines else "") or f"命令失败（exit={exit_error.code}）",
-            "log": err_buffer.getvalue().strip(),
-        }
-    stdout = out_buffer.getvalue().strip()
-    result: dict[str, object] = {"ok": True, "log": err_buffer.getvalue().strip()}
-    if stdout.startswith("{"):
-        try:
-            result["result"] = json.loads(stdout)
-            return result
-        except ValueError:
-            pass
-    result["result"] = stdout
-    return result
+def _profile(arguments: dict) -> str | None:
+    return arguments.get("profile") or os.environ.get("MEDIA_PROFILE") or None
+
+
+def _params(arguments: dict) -> list:
+    return list(arguments.get("param") or [])
 
 
 # ------------------------------------------------------------------ MCP tools
@@ -213,120 +187,109 @@ TOOLS = [
 
 
 def call_tool(name: str, arguments: dict) -> dict:
-    if name == "media_profiles":
-        found = config.profiles()
-        default = config.read_config().get("default")
-        rows = []
-        for profile_name in sorted(found):
-            entry = found[profile_name]
-            key, source = config.resolve_key(profile_name, entry)
-            rows.append(
-                {
-                    "profile": profile_name,
-                    "default": profile_name == default,
-                    "protocol": entry.get("protocol"),
-                    "base_url": entry.get("base_url"),
-                    "default_models": entry.get("default_models") or {},
-                    "key": config.mask(key) if key else None,
-                    "key_source": source,
-                }
+    """All tools go through ``api`` — the same code path as the CLI."""
+    log: list[str] = []
+    profile = _profile(arguments)
+    try:
+        if name == "media_profiles":
+            return _envelope(True, api.profiles())
+
+        if name == "media_models":
+            outcome = api.models(profile, kind=arguments.get("kind"), log=log.append)
+            return _envelope(True, {"profile": outcome["profile"],
+                                    "models": outcome["models"],
+                                    "note": outcome["note"]}, log=log)
+
+        if name == "media_image":
+            outcome = api.image(
+                profile,
+                model=arguments.get("model"),
+                prompt=arguments.get("prompt"),
+                size=arguments.get("size"),
+                n=int(arguments.get("n") or 1),
+                ref=arguments.get("image"),
+                mask=arguments.get("mask"),
+                params=api.parse_params(_params(arguments)),
+                out=arguments.get("out"),
+                log=log.append,
             )
-        return {"ok": True, "result": rows}
+            files = outcome["files"]
+            return _envelope(True, files if len(files) > 1 else files[0], log=log)
 
-    if name == "media_models":
-        args = _args(kind=arguments.get("kind"), json=True, profile=arguments.get("profile") or None)
-        return _capture(cli.cmd_models, args)
-
-    if name == "media_image":
-        def _image(args):
-            outcome = _capture(cli.cmd_image, args)
-            if outcome.get("ok"):
-                lines = [line for line in str(outcome.get("result", "")).splitlines() if line.strip()]
-                outcome["result"] = lines if len(lines) > 1 else (lines[0] if lines else "")
-            return outcome
-
-        args = _args(
-            prompt=arguments.get("prompt"),
-            model=arguments.get("model"),
-            size=arguments.get("size"),
-            n=int(arguments.get("n") or 1),
-            image=arguments.get("image"),
-            mask=arguments.get("mask"),
-            out=arguments.get("out"),
-            dry_run=bool(arguments.get("dry_run")),
-            param=list(arguments.get("param") or []),
-            profile=arguments.get("profile") or None,
-        )
-        return _image(args)
-
-    if name == "media_video":
-        args = _args(
-            prompt=arguments.get("prompt"),
-            model=arguments.get("model"),
-            seconds=arguments.get("seconds"),
-            size=arguments.get("size"),
-            ratio=arguments.get("ratio"),
-            resolution=arguments.get("resolution"),
-            image=arguments.get("image"),
-            out=arguments.get("out"),
-            create_only=bool(arguments.get("create_only")),
-            remix=arguments.get("remix") or None,
-            extend=arguments.get("extend") or None,
-            last_frame=arguments.get("last_frame") or None,
-            dry_run=bool(arguments.get("dry_run")),
-            interval=int(arguments.get("interval") or cli.DEFAULT_INTERVAL),
-            timeout=int(arguments.get("timeout") or cli.DEFAULT_TIMEOUT),
-            param=list(arguments.get("param") or []),
-            profile=arguments.get("profile") or None,
-        )
-        return _capture(cli.cmd_video, args)
-
-    if name == "media_task":
-        action = arguments.get("action")
-        task_id = arguments.get("task_id")
-        profile = arguments.get("profile") or None
-        if action == "status":
-            return _capture(cli.cmd_status, _args(task_id=task_id, profile=profile))
-        if action == "wait":
-            return _capture(
-                cli.cmd_wait,
-                _args(
-                    task_id=task_id,
-                    profile=profile,
-                    interval=int(arguments.get("interval") or cli.DEFAULT_INTERVAL),
-                    timeout=int(arguments.get("timeout") or cli.DEFAULT_TIMEOUT),
-                ),
+        if name == "media_video":
+            outcome = api.video(
+                profile,
+                model=arguments.get("model"),
+                prompt=arguments.get("prompt"),
+                seconds=arguments.get("seconds"),
+                size=arguments.get("size"),
+                ratio=arguments.get("ratio"),
+                resolution=arguments.get("resolution"),
+                ref=arguments.get("image"),
+                params=api.parse_params(_params(arguments)),
+                out=arguments.get("out"),
+                create_only=bool(arguments.get("create_only")),
+                remix=arguments.get("remix") or None,
+                extend=arguments.get("extend") or None,
+                last_frame=arguments.get("last_frame") or None,
+                interval=int(arguments.get("interval") or api.DEFAULT_INTERVAL),
+                timeout=int(arguments.get("timeout") or api.DEFAULT_TIMEOUT),
+                log=log.append,
             )
-        if action == "download":
-            return _capture(cli.cmd_download, _args(task_id=task_id, out=arguments.get("out"),
-                                                    last_frame=arguments.get("last_frame") or None,
-                                                    profile=profile))
-        return {"ok": False, "error": f"未知 action：{action}"}
+            if outcome.get("create_only"):
+                return _envelope(True, outcome["task_id"], log=log)
+            return _envelope(True, outcome["file"], log=log)
 
-    if name == "media_speech":
-        args = _args(
-            text=arguments.get("text"),
-            model=arguments.get("model"),
-            voice=arguments.get("voice"),
-            format=arguments.get("format"),
-            out=arguments.get("out"),
-            dry_run=bool(arguments.get("dry_run")),
-            profile=arguments.get("profile") or None,
-        )
-        return _capture(cli.cmd_speech, args)
+        if name == "media_speech":
+            outcome = api.speech(
+                profile,
+                model=arguments.get("model"),
+                text=arguments.get("text"),
+                voice=arguments.get("voice"),
+                fmt=arguments.get("format"),
+                out=arguments.get("out"),
+                log=log.append,
+            )
+            return _envelope(True, outcome["file"], log=log)
 
-    if name == "media_transcribe":
-        args = _args(
-            file=arguments.get("file"),
-            model=arguments.get("model"),
-            language=arguments.get("language"),
-            out=arguments.get("out"),
-            dry_run=bool(arguments.get("dry_run")),
-            profile=arguments.get("profile") or None,
-        )
-        return _capture(cli.cmd_transcribe, args)
+        if name == "media_transcribe":
+            outcome = api.transcribe(
+                profile,
+                model=arguments.get("model"),
+                file=arguments.get("file"),
+                language=arguments.get("language"),
+                out=arguments.get("out"),
+                log=log.append,
+            )
+            return _envelope(True, outcome["file"] or outcome["text"], log=log)
 
-    return {"ok": False, "error": f"未知工具：{name}"}
+        if name == "media_task":
+            action = arguments.get("action")
+            task_id = arguments.get("task_id")
+            if action == "status":
+                return _envelope(True, api.status(profile, task_id), log=log)
+            if action == "wait":
+                outcome = api.wait(
+                    profile, [task_id],
+                    timeout=int(arguments.get("timeout") or api.DEFAULT_TIMEOUT),
+                    interval=int(arguments.get("interval") or api.DEFAULT_INTERVAL),
+                    log=log.append,
+                )
+                payload = outcome["results"][0] if outcome["results"] else None
+                if outcome["failed"]:
+                    return _envelope(False, payload, f"任务 {task_id} 未完成", log)
+                return _envelope(True, payload, log=log)
+            if action == "download":
+                outcome = api.download(profile, task_id, out=arguments.get("out"),
+                                       last_frame=arguments.get("last_frame") or None,
+                                       log=log.append)
+                return _envelope(True, outcome["file"], log=log)
+            return _envelope(False, error=f"未知 action：{action}")
+
+        return _envelope(False, error=f"未知工具：{name}")
+
+    except (api.UsageError, config.ConfigError, MediaError) as error:
+        return _envelope(False, error=str(error), log=log)
 
 
 # ------------------------------------------------------------------- JSON-RPC

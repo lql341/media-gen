@@ -1,0 +1,16 @@
+# install.sh --copy 的清单：相对仓库根目录，支持 glob。
+# 新增文件后如果忘了写进来，tests/test-install.sh 会失败。
+SKILL.md
+VERSION
+LICENSE
+CAPABILITIES.md
+ROADMAP.md
+MIGRATION.md
+references/*.md
+docs/*.md
+scripts/*.py
+scripts/*.sh
+scripts/*.ps1
+scripts/*.json
+scripts/protocols/*.py
+scripts/mediaconfig/*.py

@@ -19,7 +19,8 @@ from unittest import mock
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "scripts"))
 
-import media_config as config  # noqa: E402
+import media_config as config
+from mediaconfig import store as store_impl  # 内部状态（缓存/调试钩子）属于实现模块  # noqa: E402
 
 SHIM = """#!/usr/bin/env bash
 set -u
@@ -88,17 +89,17 @@ class PlatformBranches(unittest.TestCase):
             "PATH": self.bin + os.pathsep + os.environ.get("PATH", ""),
             "MEDIA_CREDENTIAL_STORE": "auto",
         }
-        config._STORE_CACHE.clear()
+        store_impl._STORE_CACHE.clear()
         # 本套测试故意走 shim 存储（临时文件），把调试日志截获，避免污染“零凭据库删除”的断言
         self.log: list[str] = []
         self._debug_patch = mock.patch.object(
-            config, "_debug_store", side_effect=lambda message: self.log.append(message)
+            store_impl, "_debug_store", side_effect=lambda message: self.log.append(message)
         )
         self._debug_patch.start()
 
     def tearDown(self) -> None:
         self._debug_patch.stop()
-        config._STORE_CACHE.clear()
+        store_impl._STORE_CACHE.clear()
         self.tmp.cleanup()
 
     def _install_secret_tool(self) -> None:
@@ -114,16 +115,16 @@ class PlatformBranches(unittest.TestCase):
             self.assertEqual(config.secure_store_name(), "Secret Service")
             provider = config.store_key("litellm", "linux-key-1234", None)
             self.assertEqual(provider, "Secret Service")
-            self.assertEqual(config._read_store(config.SERVICE, "litellm"), "linux-key-1234")
+            self.assertEqual(store_impl._read_store(config.SERVICE, "litellm"), "linux-key-1234")
             # 账户条目独立
             config.store_key("litellm", "team-key-5678", "team")
-            self.assertEqual(config._read_store(config.SERVICE, "litellm@team"), "team-key-5678")
+            self.assertEqual(store_impl._read_store(config.SERVICE, "litellm@team"), "team-key-5678")
             # 删除需要闸门
             with self.assertRaises(config.ConfigError):
                 config.delete_key("litellm", "team")
             with mock.patch.dict(os.environ, {"MEDIA_ALLOW_CREDENTIAL_DELETE": "1"}):
                 self.assertTrue(config.delete_key("litellm", "team"))
-            self.assertIsNone(config._read_store(config.SERVICE, "litellm@team"))
+            self.assertIsNone(store_impl._read_store(config.SERVICE, "litellm@team"))
 
     def test_linux_without_keyring_degrades(self) -> None:
         with mock.patch.dict(os.environ, self.env, clear=False), \
@@ -153,7 +154,7 @@ class PlatformBranches(unittest.TestCase):
         with mock.patch.dict(os.environ, env, clear=False), \
                 mock.patch.object(config.platform, "system", return_value="Linux"):
             self.assertIsNone(config.secure_store_name())
-            config._read_store(config.SERVICE, "litellm")
+            store_impl._read_store(config.SERVICE, "litellm")
             self.assertFalse(os.path.exists(self.store), "store 不应被访问")
 
 

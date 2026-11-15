@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""media-gen CLI — image and video generation over any configured endpoint.
+"""media-gen CLI — a thin front end over ``api.py``.
 
-    media.py models [--kind image|video] [--json]
-    media.py image  -p "<prompt>" [--model M] [--size 1024x1024] [-n N] [--image ref.png] [-o out.png]
-    media.py video  -p "<prompt>" [--model M] [-s SECONDS] [--size|--ratio/--resolution] [--image first.png] [-o out.mp4]
-    media.py run    …   same flags as image/video, kind inferred from the model
-    media.py status <task_id> | wait <task_id> | download <task_id> <out>
-    media.py doctor
+    media.py models [--kind image|video|speech|transcription] [--json] [--access]
+    media.py image  -p "<prompt>" [--model M] [--size 1024x1024] [-n N] [--image ref] [-o out]
+    media.py video  -p "<prompt>" [--model M] [-s SECONDS] [--ratio] [--resolution] [--image] [-o]
+    media.py run    …   same flags, kind inferred from the registry
+    media.py speech -t "<text>" · transcribe -f audio.mp3
+    media.py status <id> | wait <id>… | download <id> [out]
+    media.py tasks | list --model M | doctor [--gaps] [--matrix]
 
-Every command accepts ``--profile`` (endpoint) and honours environment
-overrides (``MEDIA_PROFILE``, ``MEDIA_BASE_URL``, ``MEDIA_API_KEY``). The wire
-protocol comes from the profile (``openai``/``ark``/``dashscope``/``minimax``);
-the model's capabilities come from the registry. Nothing here is tied to one
-gateway or one model family.
+Argument parsing, printing and exit codes live here; every request is built in
+``api.py`` so the MCP server takes exactly the same path. ``--profile`` selects
+the endpoint; ``MEDIA_*`` environment variables override configuration.
 """
 
 from __future__ import annotations
@@ -21,14 +20,17 @@ import argparse
 import json
 import os
 import sys
-import time
 
+import api
 import media_config as config
 import registry
-from protocols import Endpoint, MediaError, VideoState, load_protocol, write_atomic
+from protocols import MediaError
 
-DEFAULT_INTERVAL = int(os.environ.get("MEDIA_POLL_INTERVAL", "10"))
-DEFAULT_TIMEOUT = int(os.environ.get("MEDIA_POLL_TIMEOUT", "1800"))
+DEFAULT_INTERVAL = api.DEFAULT_INTERVAL
+DEFAULT_TIMEOUT = api.DEFAULT_TIMEOUT
+
+#: doctor 报告里逐模型描述能力，与 api 保持同一份实现
+capability_line = api.capability_line
 
 
 # --------------------------------------------------------------------- helpers
@@ -39,236 +41,22 @@ def die(message: str, code: int = 1) -> "NoReturn":  # type: ignore[name-defined
     raise SystemExit(code)
 
 
-def parse_params(values) -> dict:
-    params: dict = {}
-    for item in values or []:
-        key, separator, value = str(item).partition("=")
-        if not separator or not key.strip():
-            die(f"--param 需要 K=V 形式：{item}", 2)
-        text = value.strip()
-        if text.lower() in ("true", "false"):
-            params[key.strip()] = text.lower() == "true"
-        elif text.lstrip("-").isdigit():
-            params[key.strip()] = int(text)
-        else:
-            params[key.strip()] = text
-    return params
-
-
 def announce(message: str) -> None:
     print(message, file=sys.stderr)
-
-
-def make_context(args) -> tuple[str, dict, object]:
-    name, profile = config.require_profile(getattr(args, "profile", None))
-    key, key_source = config.resolve_key(name, profile)
-    if not key:
-        die(
-            f"配置档 {name} 没有可用密钥；运行 scripts/setup.sh add {name} --protocol "
-            f"{profile['protocol']} --base-url {profile['base_url']}，或设置 MEDIA_API_KEY"
-        )
-    if getattr(args, "verbose", False):
-        announce(f"配置档 {name} · protocol {profile['protocol']} · 密钥来自 {key_source}")
-    endpoint = Endpoint(
-        protocol=profile["protocol"],
-        base_url=profile["base_url"],
-        key=key,
-        timeout=int(getattr(args, "timeout_seconds", 0) or 120),
-        headers=profile.get("headers") if isinstance(profile.get("headers"), dict) else None,
-        query=profile.get("query") if isinstance(profile.get("query"), dict) else None,
-    )
-    spec = protocol_spec(name, profile)
-    protocol = load_protocol(profile["protocol"])(endpoint, spec)
-    return name, profile, protocol
-
-
-def protocol_spec(name: str, profile: dict) -> dict | None:
-    """custom 读模板文件，command 读命令表；其余协议不需要 spec。"""
-    protocol = profile.get("protocol")
-    if protocol == "custom":
-        path = profile.get("custom_file") or str(config.custom_spec_path(name))
-        path = os.path.expanduser(path)
-        if not os.path.isfile(path):
-            die(f"custom 模板不存在：{path}；用 setup.sh add {name} --protocol custom --custom-file <文件>", 2)
-        try:
-            with open(path, encoding="utf-8") as handle:
-                spec = json.load(handle)
-        except ValueError as error:
-            die(f"custom 模板不是合法 JSON（{path}）：{error}", 2)
-        if not isinstance(spec, dict) or not ({"image", "video"} & set(spec)):
-            die(f"custom 模板至少要有 image 或 video 段：{path}", 2)
-        return spec
-    if protocol == "command":
-        commands = profile.get("command")
-        if not isinstance(commands, dict) or not commands:
-            die(f"command 协议需要在配置档里提供 command 命令表（setup.sh add {name} --protocol command --command-json …）", 2)
-        return {"command": commands}
-    return None
-
-
-def pick_model(args, profile: dict, kind: str) -> str:
-    explicit = getattr(args, "model", None)
-    if explicit:
-        return explicit
-    env = os.environ.get(f"MEDIA_{kind.upper()}_MODEL", "")
-    if env:
-        return env
-    defaults = profile.get("default_models") or {}
-    saved = defaults.get(kind) if isinstance(defaults, dict) else None
-    if isinstance(saved, str) and saved:
-        return saved
-    known = [
-        model
-        for model in _registry_models(kind)
-        if model != ""
-    ]
-    hint = f"；例如 {known[0]}" if known else ""
-    die(f"{kind} 需要 --model（或用 setup.sh add … --default-{kind} 保存默认值）{hint}", 2)
-
-
-def _registry_models(kind: str) -> list[str]:
-    found = []
-    for rule in registry.load_rules():
-        if rule.get("kind") == kind:
-            found.extend(pattern.replace("*", "") for pattern in rule["match"])
-    return found
-
-
-def normalize_image_size(model: str, size: str | None) -> str | None:
-    if not size:
-        return None
-    capability = registry.resolve(model)
-    return registry.validate_size(model, size, capability)
-
-
-def normalize_seconds(model: str, seconds: int | None) -> int | None:
-    if seconds is None:
-        return None
-    return registry.check_duration(model, seconds, registry.resolve(model))
-
-
-def capability_line(model: str) -> str:
-    capability = registry.resolve(model)
-    return capability.describe() if capability else f"{registry.guess_kind(model)}（未在能力表中）"
-
-
-def write_artifact(path: str, payload: bytes) -> None:
-    write_atomic(path, payload)
-
-
-def variant_path(base: str, index: int, suffix: str | None) -> str:
-    """批量图片：<stem>-1<suffix>、<stem>-2<suffix> …（保留原扩展名，缺失时用服务端后缀）"""
-    root, extension = os.path.splitext(base)
-    extension = extension or (suffix or ".png")
-    return f"{root}-{index}{extension}"
-
-
-def state_dir() -> str:
-    base = os.environ.get("XDG_STATE_HOME", "")
-    root = base if base.startswith("/") else os.path.join(os.path.expanduser("~"), ".local", "state")
-    return os.path.join(root, "media-gen")
-
-
-def ledger_path() -> str:
-    return os.path.join(state_dir(), "tasks.jsonl")
-
-
-def record_task(entry: dict) -> None:
-    """追加一条任务记录（本地台账；失败只提示，不影响主流程）。"""
-    try:
-        directory = state_dir()
-        os.makedirs(directory, mode=0o700, exist_ok=True)
-        entry = dict(entry)
-        entry["at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-        with open(ledger_path(), "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        os.chmod(ledger_path(), 0o600)
-    except OSError as error:
-        announce(f"（任务台账写入失败：{error}）")
-
-
-def load_ledger() -> list[dict]:
-    try:
-        with open(ledger_path(), encoding="utf-8") as handle:
-            return [json.loads(line) for line in handle if line.strip()]
-    except FileNotFoundError:
-        return []
-    except (OSError, ValueError):
-        return []
-
-
-def default_output(kind: str) -> str:
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    return f"media-{stamp}.{'mp4' if kind == 'video' else 'png'}"
-
-
-def save_last_frame(protocol, state: "VideoState", target: str | None) -> None:
-    """把任务的尾帧写到 target；网关没给 last_frame_url 时只提示，不算失败。"""
-    if not target:
-        return
-    if not state.last_frame_url:
-        announce("该任务没有返回 last_frame_url，未保存尾帧（网关不支持时属正常）")
-        return
-    data = protocol.fetch(state.last_frame_url)
-    write_artifact(os.path.expanduser(target), data)
-    announce(f"尾帧已保存 {target}（{len(data)} 字节）")
-
-
-def out_path(value: str | None, kind: str) -> str:
-    """-o 展开 ~（agent 常把 "~/x.png" 原样传进来），否则会建出一个名为 ~ 的目录。"""
-    return os.path.expanduser(value) if value else default_output(kind)
 
 
 # -------------------------------------------------------------------- commands
 
 
 def cmd_models(args) -> int:
-    _, profile, protocol = make_context(args)
-    listed = None
-    try:
-        listed = protocol.list_models()
-    except MediaError as error:
-        announce(f"（无法列出端点模型：{error}）")
-    rows = []
-    if listed:
-        for model in listed:
-            capability = registry.resolve(model)
-            kind = capability.kind if capability else registry.guess_kind(model)
-            if args.kind and kind != args.kind:
-                continue
-            rows.append(
-                {
-                    "model": model,
-                    "kind": kind,
-                    "capability": capability.describe() if capability else "",
-                    "source": "endpoint",
-                }
-            )
-    else:
-        for rule in registry.load_rules():
-            if args.kind and rule.get("kind") != args.kind:
-                continue
-            rows.append(
-                {
-                    "model": ", ".join(rule["match"]),
-                    "kind": rule["kind"],
-                    "capability": str(rule.get("notes", "")),
-                    "source": "registry",
-                }
-            )
-    if getattr(args, "access", False):
-        allowed = probe_allowlist(protocol, profile)
-        if allowed:
-            rows_all = [row for row in rows if row["model"] in allowed] or [
-                {"model": model, "kind": registry.resolve(model).kind if registry.resolve(model) else registry.guess_kind(model),
-                 "capability": "", "source": "allowlist"} for model in allowed
-            ]
-            rows = rows_all
-            print(f"# key 白名单共 {len(allowed)} 个模型（探测结果，未建任务）")
-        else:
-            print("# 无法从网关读出白名单（该端点报错不含清单）")
+    result = api.models(args.profile, kind=args.kind, access=args.access,
+                        timeout=args.timeout_seconds, verbose=args.verbose, log=announce)
+    rows = result["models"]
+    if result["note"]:
+        print(result["note"])
     if args.json:
-        print(json.dumps({"profile": profile, "models": rows}, ensure_ascii=False, indent=2))
+        print(json.dumps({"profile": result["profile_config"], "models": rows},
+                         ensure_ascii=False, indent=2))
         return 0
     if not rows:
         print("没有匹配的模型；端点未暴露 /models 时请直接用 --model")
@@ -279,308 +67,112 @@ def cmd_models(args) -> int:
     return 0
 
 
-def probe_allowlist(protocol, profile: dict) -> list[str] | None:
-    """发一个必然被拒的请求，从报错里解析团队白名单（不建任务，不花钱）。"""
-    import re as _re
-
-    # 用一个不可能存在的模型名发一次 POST：无论被拒是"白名单"还是"模型不存在"，都不会建出计费任务；
-    # 不用 GET /videos/<假 id>，那在某些网关上会卡到超时而不是返回白名单。
-    probe = {"model": "__media_gen_allowlist_probe__", "prompt": "probe"}
-    try:
-        status, payload, raw = protocol._request(
-            "POST", protocol.endpoint.base_url + "/images/generations", probe
-        )
-        text = f"{status} {payload}"
-    except MediaError as error:
-        text = str(error)
-    match = _re.search(r"can only access models=\s*\[(.*?)\]", str(text), _re.S)
-    if not match:
-        return None
-    return [item.strip().strip("'\"") for item in match.group(1).split(",") if item.strip()]
-
-
 def cmd_image(args) -> int:
-    name, profile, protocol = make_context(args)
-    model = pick_model(args, profile, "image")
-    size = normalize_image_size(model, args.size)
+    params = api.parse_params(args.param)
     if args.dry_run:
-        print(
-            json.dumps(
-                {
-                    "profile": name,
-                    "protocol": profile["protocol"],
-                    "kind": "image",
-                    "model": model,
-                    "prompt": args.prompt,
-                    "size": size,
-                    "n": args.n,
-                    "reference": args.image,
-                    "mask": getattr(args, "mask", None),
-                    "params": parse_params(args.param),
-                    "capability": capability_line(model),
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
+        name, profile, _ = api.context(args.profile, timeout=args.timeout_seconds,
+                                       verbose=args.verbose, log=announce)
+        model = api.pick_model(args.model, profile, "image")
+        size = api.normalize_image_size(model, args.size)
+        print(json.dumps(
+            api.plan_image(name, profile, model, args.prompt, size, args.n,
+                           args.image, getattr(args, "mask", None), params),
+            ensure_ascii=False, indent=2))
         return 0
-    if args.n > 1:
-        capability = registry.resolve(model)
-        if capability is not None and not capability.n:
-            die(f"{model} 不支持 n>1（能力表未标注 n）")
-    ref = args.image or None
-    if ref and not str(ref).startswith(("http://", "https://")):
-        ref = os.path.expanduser(ref)
-        if not os.path.isfile(ref):
-            die(f"找不到参考图（也不是 http(s) URL）：{args.image}")
-    mask = os.path.expanduser(args.mask) if getattr(args, "mask", None) else None
-    if mask and not os.path.isfile(mask):
-        die(f"找不到遮罩图：{mask}")
-    results = protocol.image(
-        model, args.prompt, size=size, n=args.n, ref=ref, mask=mask, params=parse_params(args.param)
-    )
-    if not results:
-        die("服务端没有返回任何图片")
-    base_out = out_path(args.out, "image")
-    written: list[str] = []
-    for index, result in enumerate(results, 1):
-        payload = result.data
-        if not payload and result.url:
-            announce(f"从 {result.url[:80]}… 下载图片")
-            payload = protocol.fetch(result.url)
-        if not payload:
-            die(f"第 {index} 张图片没有内容")
-        path = base_out if len(results) == 1 else variant_path(base_out, index, result.suffix)
-        write_artifact(path, payload)
-        written.append(path)
-        announce(f"#{index} {len(payload)} 字节" + (f" · {result.url}" if result.url else ""))
-    announce(f"模型 {model} · {size or '默认尺寸'} · {len(written)} 张")
-    if getattr(args, "json", False):
-        print(json.dumps({"ok": True, "model": model, "size": size, "files": written,
-                          "count": len(written)}, ensure_ascii=False))
+    result = api.image(args.profile, model=args.model, prompt=args.prompt, size=args.size,
+                       n=args.n, ref=args.image, mask=getattr(args, "mask", None),
+                       params=params, out=args.out, timeout=args.timeout_seconds,
+                       verbose=args.verbose, log=announce)
+    if args.json:
+        print(json.dumps({"ok": True, "model": result["model"], "size": result["size"],
+                          "files": result["files"], "count": result["count"]},
+                         ensure_ascii=False))
         return 0
-    for path in written:
+    for path in result["files"]:
         print(path)
     return 0
 
 
 def cmd_video(args) -> int:
-    name, profile, protocol = make_context(args)
-    model = pick_model(args, profile, "video")
-    size = normalize_image_size(model, args.size)
-    seconds = normalize_seconds(model, args.seconds)
+    params = api.parse_params(args.param)
     if args.dry_run:
-        print(
-            json.dumps(
-                {
-                    "profile": name,
-                    "protocol": profile["protocol"],
-                    "kind": "video",
-                    "model": model,
-                    "prompt": args.prompt,
-                    "seconds": seconds,
-                    "size": size,
-                    "ratio": args.ratio,
-                    "resolution": args.resolution,
-                    "first_frame": args.image,
-                    "params": parse_params(args.param),
-                    "capability": capability_line(model),
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
+        name, profile, _ = api.context(args.profile, timeout=args.timeout_seconds,
+                                       verbose=args.verbose, log=announce)
+        model = api.pick_model(args.model, profile, "video")
+        print(json.dumps(
+            api.plan_video(name, profile, model, args.prompt,
+                           api.normalize_seconds(model, args.seconds),
+                           api.normalize_image_size(model, args.size),
+                           args.ratio, args.resolution, args.image, params),
+            ensure_ascii=False, indent=2))
         return 0
-    ref = args.image or None
-    if ref and not str(ref).startswith(("http://", "https://")):
-        ref = os.path.expanduser(ref)
-        if not os.path.isfile(ref):
-            die(f"找不到首帧图（也不是 http(s) URL）：{args.image}")
-    if getattr(args, "remix", None) or getattr(args, "extend", None):
-        base_id = getattr(args, "remix", None) or getattr(args, "extend", None)
-        action = "remix" if getattr(args, "remix", None) else "extend"
-        announce(f"{action} {base_id} → 新任务（{model}）")
-        creator = protocol.video_remix if action == "remix" else protocol.video_extend
-        if action == "remix":
-            task_id = creator(base_id, args.prompt)
-        else:
-            task_id = creator(base_id, args.prompt, seconds)
-        announce(f"task {task_id}")
-        record_task({"id": task_id, "kind": "video", "model": model, "profile": name,
-                     "status": "created", "seconds": seconds, "size": size,
-                     "file": None, "url": None})
-        if getattr(args, "create_only", False):
-            print(task_id)
+    result = api.video(args.profile, model=args.model, prompt=args.prompt,
+                       seconds=args.seconds, size=args.size, ratio=args.ratio,
+                       resolution=args.resolution, ref=args.image, params=params,
+                       out=args.out, create_only=args.create_only,
+                       remix=getattr(args, "remix", None), extend=getattr(args, "extend", None),
+                       last_frame=getattr(args, "last_frame", None),
+                       interval=args.interval, timeout=args.timeout,
+                       request_timeout=args.timeout_seconds,
+                       verbose=args.verbose, log=announce)
+    if args.create_only:
+        # 只建任务时输出裸 id，便于脚本直接接 status/wait
+        print(result["task_id"])
+        return 0
+    if result["remixed"]:
+        announce(f"完成：{result['bytes']} 字节")
+        if args.json:
+            print(json.dumps({"ok": True, "task_id": result["task_id"], "file": result["file"],
+                              "seconds": result["seconds"], "size": result["size"],
+                              "url": result["url"]}, ensure_ascii=False))
             return 0
-        state = wait_for(protocol, task_id, args.timeout, args.interval)
-        out = out_path(args.out, "video")
-        size = protocol.video_download(task_id, state, out)
-        save_last_frame(protocol, state, getattr(args, "last_frame", None))
-        record_task({"id": task_id, "kind": "video", "model": model, "profile": name,
-                     "status": state.status, "seconds": state.seconds, "size": state.size,
-                     "file": out, "url": state.url, "usage": state.usage})
-        announce(f"完成：{size} 字节")
-        if getattr(args, "json", False):
-            print(json.dumps({"ok": True, "task_id": task_id, "file": out,
-                              "seconds": state.seconds, "size": state.size,
-                              "url": state.url}, ensure_ascii=False))
-            return 0
-        print(out)
+        print(result["file"])
         return 0
-
-    announce(f"创建任务：{model}（{capability_line(model)}）")
-    task_id = protocol.video_create(
-        model,
-        args.prompt,
-        seconds=seconds,
-        size=size,
-        resolution=args.resolution,
-        ratio=args.ratio,
-        ref=ref,
-        params=parse_params(args.param),
-    )
-    announce(f"task {task_id}")
-    record_task({"id": task_id, "kind": "video", "model": model, "profile": name,
-                 "status": "created", "seconds": seconds, "size": size, "file": None, "url": None})
-    if getattr(args, "create_only", False):
-        print(task_id)
-        return 0
-    state = wait_for(protocol, task_id, args.timeout, args.interval)
-    out = out_path(args.out, "video")
-    size = protocol.video_download(task_id, state, out)
-    save_last_frame(protocol, state, getattr(args, "last_frame", None))
-    announce(
-        "完成："
-        + " · ".join(
-            part
-            for part in (
-                f"{state.seconds}s" if state.seconds else "",
-                state.size or "",
-                f"{size} 字节",
-            )
-            if part
-        )
-    )
-    if state.url:
-        announce(f"远端地址 {state.url}")
-    if state.usage:
-        announce(f"用量 {json.dumps(state.usage, ensure_ascii=False)}")
-    record_task({
-        "id": task_id, "kind": "video", "model": model, "profile": name,
-        "status": state.status, "seconds": state.seconds, "size": state.size,
-        "file": out, "url": state.url, "usage": state.usage,
-    })
-    if getattr(args, "json", False):
+    announce("完成：" + " · ".join(
+        part for part in (
+            f"{result['seconds']}s" if result["seconds"] else "",
+            result["size"] or "",
+            f"{result['bytes']} 字节",
+        ) if part
+    ))
+    if result["url"]:
+        announce(f"远端地址 {result['url']}")
+    if result["usage"]:
+        announce(f"用量 {json.dumps(result['usage'], ensure_ascii=False)}")
+    if args.json:
         print(json.dumps({
-            "ok": True, "task_id": task_id, "model": model, "profile": name,
-            "status": state.status, "seconds": state.seconds, "size": state.size,
-            "file": out, "url": state.url, "last_frame_url": state.last_frame_url,
-            "usage": state.usage,
+            "ok": True, "task_id": result["task_id"], "model": result["model"],
+            "profile": result["profile"], "status": result["status"],
+            "seconds": result["seconds"], "size": result["size"], "file": result["file"],
+            "url": result["url"], "last_frame_url": result["last_frame_url"],
+            "usage": result["usage"],
         }, ensure_ascii=False))
         return 0
-    print(out)
+    print(result["file"])
     return 0
 
 
-def wait_for(protocol, task_id: str, timeout: int, interval: int) -> VideoState:
-    started = time.time()
-    while True:
-        state = protocol.video_status(task_id)
-        if state.done:
-            announce(f"状态 {state.status}")
-            return state
-        if state.failed:
-            die(f"任务 {task_id} {state.status}：{state.error or '（无错误信息）'}")
-        elapsed = int(time.time() - started)
-        if elapsed > timeout:
-            die(f"等待超时（{timeout}s），最后状态 {state.status}；任务 {task_id} 仍在运行，可稍后 status/wait")
-        announce(f"状态 {state.status}（{elapsed}s）")
-        time.sleep(interval)
-
-
 def cmd_status(args) -> int:
-    _, _, protocol = make_context(args)
-    state = protocol.video_status(args.task_id)
-    payload = {
-        "status": state.status,
-        "task_id": state.task_id,
-        "seconds": state.seconds,
-        "size": state.size,
-        "url": state.url,
-        "last_frame_url": state.last_frame_url,
-        "error": state.error,
-        "usage": state.usage,
-        "raw": state.extra,
-    }
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    print(json.dumps(api.status(args.profile, args.task_id, timeout=args.timeout_seconds,
+                                verbose=args.verbose), ensure_ascii=False, indent=2))
     return 0
 
 
 def cmd_wait(args) -> int:
-    _, _, protocol = make_context(args)
-    # CLI 给的是 list；程序化调用（MCP server）可能给单个字符串，list("video_1") 会拆成字符
-    ids = [args.task_id] if isinstance(args.task_id, str) else list(args.task_id)
-    failed: list[str] = []
-    if len(ids) == 1:
-        state = wait_for(protocol, ids[0], args.timeout, args.interval)
-        result = [_state_dict(state)]
-    else:
-        from concurrent.futures import ThreadPoolExecutor
-
-        announce(f"并发等待 {len(ids)} 个任务（间隔 {args.interval}s，上限 {args.timeout}s）")
-        result = []
-        with ThreadPoolExecutor(max_workers=min(len(ids), 8)) as pool:
-            futures = [
-                (task, pool.submit(wait_for, protocol, task, args.timeout, args.interval))
-                for task in ids
-            ]
-            # 一个任务失败不能把其他任务已经等到的结果一起丢掉
-            for task, future in futures:
-                try:
-                    result.append(_state_dict(future.result()))
-                except SystemExit:      # wait_for 已经把原因写进 stderr（失败/超时）
-                    failed.append(task)
-                except MediaError as error:
-                    announce(f"任务 {task} 失败：{error}")
-                    failed.append(task)
-        record_task({"id": ",".join(ids), "kind": "video", "status": "waited",
-                     "model": None, "profile": None, "seconds": None, "size": None,
-                     "file": None, "url": None})
-        if failed:
-            announce(f"{len(failed)}/{len(ids)} 个任务未完成：{', '.join(failed)}"
-                     f"；下面只含已等到的 {len(result)} 个")
-    if not result:
-        die(f"没有任务等到结果（失败：{', '.join(failed)}）", 1)
-    if getattr(args, "json", False):
-        print(json.dumps(result if len(result) > 1 else result[0], ensure_ascii=False))
-    else:
-        print(json.dumps(result if len(result) > 1 else result[0], ensure_ascii=False, indent=2))
-    return 1 if failed else 0
-
-
-def _state_dict(state: VideoState) -> dict:
-    return {
-        "status": state.status,
-        "task_id": state.task_id,
-        "seconds": state.seconds,
-        "size": state.size,
-        "url": state.url,
-        "last_frame_url": state.last_frame_url,
-        "usage": state.usage,
-        "raw": state.extra,
-    }
+    result = api.wait(args.profile, args.task_id, timeout=args.timeout, interval=args.interval,
+                      timeout_seconds=args.timeout_seconds, verbose=args.verbose, log=announce)
+    payload = result["results"]
+    value = payload if len(payload) > 1 else payload[0]
+    print(json.dumps(value, ensure_ascii=False) if args.json
+          else json.dumps(value, ensure_ascii=False, indent=2))
+    return 1 if result["failed"] else 0
 
 
 def cmd_download(args) -> int:
-    _, _, protocol = make_context(args)
-    state = protocol.video_status(args.task_id)
-    if not state.done:
-        die(f"任务 {args.task_id} 尚未完成（{state.status}）；先运行 wait")
-    out = out_path(args.out, "video")
-    size = protocol.video_download(args.task_id, state, out)
-    announce(f"{size} 字节")
-    save_last_frame(protocol, state, getattr(args, "last_frame", None))
-    print(out)
+    result = api.download(args.profile, args.task_id, out=args.out,
+                          last_frame=getattr(args, "last_frame", None),
+                          timeout=args.timeout_seconds, verbose=args.verbose, log=announce)
+    print(result["file"])
     return 0
 
 
@@ -602,82 +194,48 @@ def cmd_run(args) -> int:
 
 
 def cmd_speech(args) -> int:
-    name, profile, protocol = make_context(args)
-    model = (
-        args.model
-        or os.environ.get("MEDIA_AUDIO_MODEL", "")
-        or ((profile.get("default_models") or {}).get("audio") if isinstance(
-            profile.get("default_models"), dict) else None)
-    )
-    if not model:
-        die("speech 需要 --model（或用 setup.sh add … --default-audio 保存默认值）", 2)
     if args.dry_run:
-        print(json.dumps({
-            "profile": name, "protocol": profile["protocol"], "kind": "speech",
-            "model": model, "input": args.text, "voice": args.voice, "format": args.format,
-        }, ensure_ascii=False, indent=2))
+        name, profile, _ = api.context(args.profile, timeout=args.timeout_seconds,
+                                       verbose=args.verbose, log=announce)
+        model = api.audio_model(args.model, profile, "audio")
+        print(json.dumps(api.plan_speech(name, profile, model, args.text, args.voice, args.format),
+                         ensure_ascii=False, indent=2))
         return 0
-    payload, suffix = protocol.speech(model, args.text, voice=args.voice, fmt=args.format)
-    out = os.path.expanduser(args.out) if args.out else f"media-{time.strftime('%Y%m%d-%H%M%S')}{suffix}"
-    write_artifact(out, payload)
-    announce(f"模型 {model} · {len(payload)} 字节")
-    print(out)
+    result = api.speech(args.profile, model=args.model, text=args.text, voice=args.voice,
+                        fmt=args.format, out=args.out, timeout=args.timeout_seconds,
+                        verbose=args.verbose, log=announce)
+    print(result["file"])
     return 0
 
 
 def cmd_transcribe(args) -> int:
-    name, profile, protocol = make_context(args)
-    model = (
-        args.model
-        or os.environ.get("MEDIA_TRANSCRIBE_MODEL", "")
-        or ((profile.get("default_models") or {}).get("transcription")
-            if isinstance(profile.get("default_models"), dict) else None)
-    )
-    if not model:
-        die("transcribe 需要 --model（或用 setup.sh add … --default-transcription 保存默认值）", 2)
-    path = os.path.expanduser(args.file)
-    if not os.path.isfile(path):
-        die(f"找不到音频文件：{path}")
     if args.dry_run:
-        print(json.dumps({
-            "profile": name, "protocol": profile["protocol"], "kind": "transcription",
-            "model": model, "file": path, "language": args.language,
-        }, ensure_ascii=False, indent=2))
+        name, profile, _ = api.context(args.profile, timeout=args.timeout_seconds,
+                                       verbose=args.verbose, log=announce)
+        model = api.audio_model(args.model, profile, "transcription")
+        print(json.dumps(api.plan_transcribe(name, profile, model, args.file, args.language),
+                         ensure_ascii=False, indent=2))
         return 0
-    text = protocol.transcribe(model, path, language=args.language)
-    if args.out:
-        write_artifact(os.path.expanduser(args.out), (text + "\n").encode("utf-8"))
-        announce(f"{len(text)} 字符 → {args.out}")
-        print(args.out)
-    else:
-        print(text)
+    result = api.transcribe(args.profile, model=args.model, file=args.file,
+                            language=args.language, out=args.out,
+                            timeout=args.timeout_seconds, verbose=args.verbose, log=announce)
+    print(result["file"] or result["text"])
     return 0
 
 
 def cmd_list(args) -> int:
-    name, profile, protocol = make_context(args)
+    _, profile = config.require_profile(args.profile)
     model = args.model or (profile.get("default_models") or {}).get("video")
     if not model:
         die("list 需要 --model（或给 profile 配 default_models.video）", 2)
-    if not hasattr(protocol, "video_list"):
-        die(f"{profile['protocol']} 协议没有任务列表路由")
-    try:
-        items = protocol.video_list(model, limit=args.limit)
-    except MediaError as error:
-        message = str(error)
-        if "LLM Provider NOT provided" in message:
-            die(
-                f"{name} 的任务列表路由没有把 model 转发给上游（网关侧问题，不是本地参数错）。\n"
-                f"  可改用本地台账：media.py tasks\n"
-                f"  或直接按 id 查询：media.py status <id>"
-            )
-        raise
-    if getattr(args, "json", False):
-        print(json.dumps({"ok": True, "profile": name, "model": model, "tasks": items},
+    items = api.remote_tasks(args.profile, model, limit=args.limit,
+                             timeout=args.timeout_seconds)
+    if args.json:
+        print(json.dumps({"ok": True, "profile": args.profile, "model": model, "tasks": items},
                          ensure_ascii=False, indent=2))
         return 0
     if not items:
-        print(f"（{model} 在 {name} 上没有返回任务；网关可能未实现列表路由）")
+        print(f"（{model} 在 {args.profile or '默认配置档'} 上没有返回任务；网关可能未实现列表路由）")
         return 0
     for item in items:
         print(f"{str(item.get('id', ''))[:24]:<26}{str(item.get('status', '')):<12}"
@@ -686,12 +244,8 @@ def cmd_list(args) -> int:
 
 
 def cmd_tasks(args) -> int:
-    entries = load_ledger()
-    if args.status:
-        entries = [entry for entry in entries if str(entry.get("status")) == args.status]
-    if args.limit:
-        entries = entries[-int(args.limit):]
-    if getattr(args, "json", False):
+    entries = api.tasks(args.status, args.limit)
+    if args.json:
         print(json.dumps(entries, ensure_ascii=False, indent=2))
         return 0
     if not entries:
@@ -728,7 +282,12 @@ def cmd_doctor(args) -> int:
     if listed is None:
         if profile["protocol"] == "custom":
             spec_path = profile.get("custom_file") or config.custom_spec_path(name)
-            parts = [kind for kind in ("image", "video") if kind in (protocol_spec(name, profile) or {})]
+            try:
+                spec = api.protocol_spec(name, profile) or {}
+            except api.UsageError as error:
+                print(f"结果        FAIL  {error}")
+                return 2
+            parts = [kind for kind in ("image", "video") if kind in spec]
             print(f"结果        OK    custom 模板（{os.path.basename(str(spec_path))}）：支持 {', '.join(parts) or '（空）'}")
         elif profile["protocol"] == "command":
             commands = (profile.get("command") or {}).keys()
@@ -959,6 +518,8 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["MEDIA_ACCOUNT"] = str(args.account)
     try:
         return int(args.func(args) or 0)
+    except api.UsageError as error:
+        die(str(error), 2)
     except registry.RegistryError as error:
         die(str(error), 2)
     except config.ConfigError as error:

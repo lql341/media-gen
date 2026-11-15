@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.14.0 - 2026-11-15
+
+Internal layering only; CLI and MCP behaviour are unchanged.
+
+- **`scripts/api.py`** is now the single code path for both front ends: plain arguments in, dicts
+  out, errors raised (`UsageError` → exit 2, `MediaError` → exit 1). `media.py` keeps argument
+  parsing and formatting; `mcp_server.py` no longer imports it, builds argparse `Namespace` objects
+  or redirects stdout — the mismatch behind the 0.11.1 `media_task wait` failure cannot recur.
+- **`media_config.py` split into `scripts/mediaconfig/`**: `paths` (files, validation), `profiles`
+  (defaults, accounts, legacy import), `store` (credential store, deletion gate), `probe` (`/models`),
+  `cli` (`add` / `show` / `rm` / `export` / `migrate`). `media_config.py` remains a 23-line façade,
+  so existing imports and every `setup.sh` entry point are unchanged.
+- **`install.sh --copy` reads `scripts/install-manifest.txt`** instead of a hand-written list and
+  fails when an entry matches no file. `tests/test_install.py` compares the installed tree against
+  `git ls-files`, so a new file type missing from the manifest fails CI.
+- README layout and suite count (eight, all offline) updated.
+
 ## 0.13.2 - 2026-11-15
 
 Gateway 500 bodies no longer reach the user as a Python traceback.

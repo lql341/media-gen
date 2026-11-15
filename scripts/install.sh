@@ -65,14 +65,24 @@ if [ "$LINK" = yes ]; then
   echo "==> 已建立符号链接（改仓库即生效）"
 else
   [ -L "$DST" ] && rm -f "$DST"
-  mkdir -p "$DST/scripts" "$DST/references" "$DST/tests"
-  cp "$SRC_DIR/SKILL.md" "$DST/SKILL.md"
-  cp "$SRC_DIR"/references/*.md "$DST/references/"
-  cp "$SRC_DIR"/scripts/*.py "$SRC_DIR"/scripts/*.sh "$SRC_DIR"/scripts/*.json "$DST/scripts/"
-  [ -f "$SRC_DIR/VERSION" ] && cp "$SRC_DIR/VERSION" "$DST/VERSION"
-  [ -d "$SRC_DIR/scripts/protocols" ] && cp -r "$SRC_DIR/scripts/protocols" "$DST/scripts/"
+  MANIFEST="$SRC_DIR/scripts/install-manifest.txt"
+  [ -f "$MANIFEST" ] || { echo "错误: 缺少 scripts/install-manifest.txt" >&2; exit 1; }
+  mkdir -p "$DST"
+  # 按清单复制：条目是相对仓库根的路径，可用 glob；清单项匹配不到即报错，避免静默少装文件
+  while IFS= read -r entry; do
+    case "$entry" in ''|'#'*) continue ;; esac
+    matched=no
+    for src in "$SRC_DIR"/$entry; do
+      [ -e "$src" ] || continue
+      matched=yes
+      rel="${src#"$SRC_DIR"/}"
+      mkdir -p "$DST/$(dirname "$rel")"
+      cp -R "$src" "$DST/$rel"
+    done
+    [ "$matched" = yes ] || { echo "错误: 清单项匹配不到任何文件：$entry" >&2; exit 1; }
+  done < "$MANIFEST"
   chmod +x "$DST"/scripts/*.sh "$DST"/scripts/*.py
-  echo "==> 已复制（仓库改动后需重跑本脚本）"
+  echo "==> 已按清单复制（仓库改动后需重跑本脚本）"
 fi
 
 echo
