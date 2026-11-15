@@ -29,7 +29,8 @@ implementing the documented wire format; it does **not** mean it was run against
    `~/.config/media-gen/registry.json` with the same shape.
 2. Add `scripts/protocols/<name>.py` implementing `image()`, `video_create()`, `video_status()`,
    `video_fetch()` on top of `Protocol` (`_request`, `_json`, `fetch` are provided).
-3. Register it in `protocols/__init__.py::load_protocol` and in `media_config.PROTOCOLS`.
+3. Register it in `protocols/__init__.py::load_protocol` and in `mediaconfig/paths.py::PROTOCOLS`
+   (re-exported as `media_config.PROTOCOLS`).
 4. Add mock routes to `tests/mock_server.py` and a test class in `tests/test_protocols.py`. The
    suite must exercise create → poll → download and inspect the request body.
 5. Document the quirks above and flip the verification column honestly.

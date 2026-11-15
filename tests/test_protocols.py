@@ -8,7 +8,6 @@ async headers) cannot silently regress.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 import tempfile
@@ -575,18 +574,20 @@ class AzureTest(unittest.TestCase):
 
 
 class RetryTest(unittest.TestCase):
-    def test_get_retries_on_5xx_but_post_does_not(self):
-        import subprocess as _sp
-
+    def test_get_is_retried_on_5xx(self):
         with MockServer() as server:
-            # 用一个只统计次数的探针：把 GET 打到不存在的路由（404 不重试），
-            # 再验证 POST 不会被重试（付费请求绝不重复提交）
-            ep = endpoint(server, "openai", "/v1")
-            protocol = load_protocol("openai")(ep)
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
+            status, _, _ = protocol._request("GET", server.url("/v1/flaky"))
+            self.assertEqual(status, 200)
+            self.assertEqual(server.state.flaky_hits, 3)
+
+    def test_post_is_never_retried(self):
+        # 付费请求绝不重复提交：一次 POST 就是一次调用
+        with MockServer() as server:
+            protocol = load_protocol("openai")(endpoint(server, "openai", "/v1"))
             before = len(server.state.calls)
             protocol.image("gpt-image-1", "x", size=None, n=1, ref=None)
-            after = len(server.state.calls)
-            self.assertEqual(after - before, 1)
+            self.assertEqual(len(server.state.calls) - before, 1)
 
 
 class ErrorShapeTest(unittest.TestCase):

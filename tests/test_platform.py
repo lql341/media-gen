@@ -8,7 +8,6 @@ code path — a native Linux run is still the only way to prove the keyring inte
 
 from __future__ import annotations
 
-import json
 import os
 import stat
 import sys

@@ -15,7 +15,12 @@ Internal layering only; CLI and MCP behaviour are unchanged.
 - **`install.sh --copy` reads `scripts/install-manifest.txt`** instead of a hand-written list and
   fails when an entry matches no file. `tests/test_install.py` compares the installed tree against
   `git ls-files`, so a new file type missing from the manifest fails CI.
-- README layout and suite count (eight, all offline) updated.
+- **`tests/test_hygiene.py`**: AST checks for duplicate definitions in one scope and unused imports —
+  the two classes of defect a green test run cannot show (a shadowed method never executes).
+- `mediaconfig/__init__.py` exports an explicit `__all__` instead of `dir()`.
+- `tests/test_protocols.py`: the retry test is split into what it actually asserts —
+  `test_get_is_retried_on_5xx` (new `/v1/flaky` route in the mock) and `test_post_is_never_retried`.
+- README layout and suite count (nine, all offline) updated.
 
 ## 0.13.2 - 2026-11-15
 

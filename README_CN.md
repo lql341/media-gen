@@ -112,8 +112,9 @@ scripts/setup.sh migrate                  # 迁移旧的 seedance 配置
 ## 测试与相关文档
 
 ```bash
-bash tests/run-all.sh     # 八套离线测试：registry 单测、六种协议 mock、
+bash tests/run-all.sh     # 九套离线测试：registry 单测、六种协议 mock、
                           # 配置优先级与生命周期、交互向导（管道驱动）、MCP server（stdio）、
+                          # 静态卫生（重复定义/未使用导入）、
                           # 安装清单（install.sh --copy）、平台分支（secret-tool shim / Windows）、
                           # CLI 端到端；零凭据库访问
 ```

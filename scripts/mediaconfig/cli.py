@@ -4,13 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-import platform
-import re
-import shutil
-import subprocess
 import sys
-import urllib.error
-import urllib.request
 
 from .paths import *  # noqa: F401,F403
 from .profiles import *  # noqa: F401,F403

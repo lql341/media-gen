@@ -153,10 +153,10 @@ ROADMAP.md                     已完成 / 待验证（等环境）/ 待开发�
 bash tests/run-all.sh
 ```
 
-Eight suites, all offline: registry unit tests, protocol adapters against a scripted mock server
+Nine suites, all offline: registry unit tests, protocol adapters against a scripted mock server
 (create → poll → download, request bodies inspected), configuration/credential precedence in a temp
-`HOME`, the interactive wizard (piped answers), the MCP server over stdio, the `--copy` install
-manifest, platform branches with shimmed `secret-tool` / Windows, and CLI end-to-end through the
+`HOME`, the interactive wizard (piped answers), the MCP server over stdio, static hygiene (duplicate definitions, unused imports), the
+`--copy` install manifest, platform branches with shimmed `secret-tool` / Windows, and CLI end-to-end through the
 mock. No network, no account, no spend, **and no keyring access**
 (`MEDIA_CREDENTIAL_STORE=none`, asserted). CI runs the same script on ubuntu 22.04
 (python 3.9), ubuntu-latest and macos-latest (python 3.12), plus a Windows job for the pure-Python

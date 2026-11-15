@@ -14,10 +14,6 @@ import sys
 
 from mediaconfig import *  # noqa: F401,F403
 from mediaconfig import main
-from mediaconfig.paths import *  # noqa: F401,F403
-from mediaconfig.profiles import *  # noqa: F401,F403
-from mediaconfig.store import *  # noqa: F401,F403
-from mediaconfig.probe import *  # noqa: F401,F403
 
 if __name__ == "__main__":
     sys.exit(main())

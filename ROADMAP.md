@@ -13,7 +13,7 @@
 | 0.12.0 | MCP 补齐 `speech` / `transcribe` / `mask` / `remix` / `extend` / `last_frame`；`--last-frame` 在 remix 分支不再被静默忽略 |
 | 0.13.0 | 视频流式下载（`.part` → 原子替换）、`write_artifact` 原子写、首个 CI |
 | 0.13.1 | Windows UTF-8 输出（MCP 在 cp1252 上无法启动）、CI 矩阵与冷启动处理、`docs/RUNBOOK.md` |
-| 0.14.0 | 内部重构：`api.py` 成为 CLI 与 MCP 的唯一入口；`media_config.py` 拆成 `mediaconfig/` 包；`install.sh` 改为清单驱动并加安装测试 |
+| 0.14.0 | 内部重构：`api.py` 成为 CLI 与 MCP 的唯一入口；`media_config.py` 拆成 `mediaconfig/` 包；`install.sh` 改为清单驱动并加安装测试；新增静态卫生检查（重复定义/未使用导入） |
 
 ## 二、待验证（代码已实现，等环境）
 

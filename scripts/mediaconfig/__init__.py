@@ -2,15 +2,64 @@
 
 from __future__ import annotations
 
-from . import paths
-from . import profiles
-from . import store
-from . import probe
-from . import cli
 from .cli import main
 from .paths import *  # noqa: F401,F403
 from .profiles import *  # noqa: F401,F403
 from .store import *  # noqa: F401,F403
 from .probe import *  # noqa: F401,F403
 
-__all__ = sorted(name for name in dir() if not name.startswith('_'))
+__all__ = [
+    "ACCOUNT_RE",
+    "ConfigError",
+    "ENV_BASE",
+    "ENV_KEY",
+    "LEGACY_SERVICE",
+    "PROFILE_RE",
+    "PROTOCOLS",
+    "SERVICE",
+    "active_profile_name",
+    "agent_auth_key",
+    "annotations",
+    "apply_account",
+    "cli",
+    "config_dir",
+    "config_file",
+    "credential_store_mode",
+    "custom_spec_path",
+    "delete_allowed",
+    "delete_key",
+    "describe_delete",
+    "ensure_utf8_stdio",
+    "env_only_profile",
+    "json",
+    "legacy_config_file",
+    "main",
+    "mask",
+    "normalize_secret",
+    "os",
+    "parse_credential_ref",
+    "parse_pairs",
+    "pathlib_read",
+    "paths",
+    "platform",
+    "probe",
+    "probe_models",
+    "profiles",
+    "re",
+    "read_config",
+    "read_json",
+    "require_profile",
+    "resolve_key",
+    "secure_store_name",
+    "shutil",
+    "split_profile_spec",
+    "store",
+    "store_item_name",
+    "store_key",
+    "subprocess",
+    "sys",
+    "urllib",
+    "validate_base_url",
+    "write_config",
+    "write_json",
+]

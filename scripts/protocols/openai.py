@@ -18,7 +18,7 @@ import base64
 import json
 
 from . import (
-    Endpoint, ImageResult, MediaError, Protocol, VideoState, data_uri, encode_multipart,
+    ImageResult, MediaError, Protocol, VideoState, data_uri, encode_multipart,
     error_message, file_part, guess_suffix,
 )
 

@@ -3,12 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-import platform
-import re
-import shutil
-import subprocess
-import sys
 import urllib.error
 import urllib.request
 

@@ -36,6 +36,7 @@ class State:
         self.headers: list[dict] = []
         self.queries: list[str] = []
         self.paths: list[str] = []
+        self.flaky_hits = 0
 
     def record(self, method: str, path: str, body: dict) -> None:
         self.calls.append((method, path, body))
@@ -178,6 +179,12 @@ def make_handler(state: State):
                         "output_meta": {"duration": 4, "size": "640x360"},
                     },
                 )
+            if path == "/v1/flaky":
+                # 前两次 500、第三次 200：只给重试测试用
+                state.flaky_hits += 1
+                if state.flaky_hits < 3:
+                    return self._json(500, {"error": {"message": f"flaky {state.flaky_hits}"}})
+                return self._json(200, {"ok": True})
             if path.startswith("/files/"):
                 suffix = path.rsplit(".", 1)[-1]
                 if suffix == "mp4":
