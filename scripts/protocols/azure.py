@@ -11,7 +11,7 @@ plainly instead of 404-ing at the wrong URL.
 
 from __future__ import annotations
 
-from . import Endpoint, MediaError
+from . import MediaError
 from .openai import OpenAIProtocol
 
 
@@ -32,7 +32,6 @@ class AzureProtocol(OpenAIProtocol):
         self, model, prompt, *, size, n, ref, mask=None, params=None
     ):
         from . import encode_multipart, file_part
-        import json as _json
 
         if ref:
             fields = {"prompt": prompt, "n": n, "response_format": "b64_json"}

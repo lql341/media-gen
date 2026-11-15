@@ -31,7 +31,6 @@ class State:
     def __init__(self) -> None:
         self.video_polls = 0
         self.calls: list[tuple[str, str, dict]] = []
-        self.fail_video = False
         self.video_mode = "eventual"  # eventual | fail
         self.content_types: list[str] = []
         self.headers: list[dict] = []

@@ -119,10 +119,6 @@ def custom_spec_path(profile: str) -> str:
     return os.path.join(config_dir(), "custom", f"{profile}.json")
 
 
-def registry_override_file() -> str:
-    return os.path.join(config_dir(), "registry.json")
-
-
 def legacy_config_file() -> str:
     xdg = os.environ.get("XDG_CONFIG_HOME", "")
     root = xdg if xdg.startswith("/") else os.path.join(os.path.expanduser("~"), ".config")
@@ -310,9 +306,6 @@ def normalize_secret(value: str, label: str = "API Key") -> str:
 
 
 _STORE_CACHE: dict[tuple[str, str], str | None] = {}
-_STORE_CALLS: list[str] = []
-
-
 def credential_store_mode() -> str:
     value = os.environ.get("MEDIA_CREDENTIAL_STORE", "auto").strip().lower()
     if os.environ.get("MEDIA_NO_KEYCHAIN", "").strip() in ("1", "true", "yes"):
@@ -330,11 +323,6 @@ def secure_store_name() -> str | None:
     return None
 
 
-def store_call_log() -> list[str]:
-    """Every credential-store access this process made (for tests / diagnostics)."""
-    return list(_STORE_CALLS)
-
-
 def _store_has(service: str, account: str) -> bool:
     """Existence check only — unlike _read_store, this never decrypts the secret."""
     provider = secure_store_name()
@@ -350,7 +338,6 @@ def _store_has(service: str, account: str) -> bool:
 
 
 def _debug_store(message: str) -> None:
-    _STORE_CALLS.append(message)
     if os.environ.get("MEDIA_DEBUG_STORE", "").strip() in ("1", "true", "yes"):
         print(f"store: {message}", file=sys.stderr)
 
